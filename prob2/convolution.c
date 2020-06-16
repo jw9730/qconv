@@ -19,7 +19,6 @@ struct ret{
 //#define DEBUG
 //#define DO_NRMSE
 
-#define Q_CONST 1
 int qbits;
 typedef enum qenum{
     INT32,
@@ -32,7 +31,7 @@ int N, H, W, C;
 int KH, KW, OC, IC;
 int PH_L, PH_H, PW_L, PW_H;
 
-void * quantize(float * S, enum qenum q, int qsize, int num_elem){
+void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
     // allocate quantized array
     assert(ALIGN_BYTES % qsize == 0);
     void * Q;
@@ -44,29 +43,29 @@ void * quantize(float * S, enum qenum q, int qsize, int num_elem){
     // amplify, typecast and copy
     if (q == INT32){
         for (int i=0; i<num_elem; i++){
-            float val = S[i] * Q_CONST;
+            float val = S[i] * scale;
             if (((int64_t) val) > INT32_MAX) ((int32_t *) Q)[i] = INT32_MAX;
             else if (((int64_t) val) < INT32_MIN) ((int32_t *) Q)[i] = INT32_MIN;
             else ((int32_t *) Q)[i] = ((int32_t) val);
-            //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int32_t *) Q)[i], (float) (((int32_t *) Q)[i] / Q_CONST));
+            //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int32_t *) Q)[i], (float) (((int32_t *) Q)[i] / scale));
         }
     }
     else if (q == INT16){
         for (int i=0; i<num_elem; i++){
-            float val = S[i] * Q_CONST;
+            float val = S[i] * scale;
             if (((int64_t) val) > INT16_MAX) ((int16_t *) Q)[i] = INT16_MAX;
             else if (((int64_t) val) < INT16_MIN) ((int16_t *) Q)[i] = INT16_MIN;
             else ((int16_t *) Q)[i] = ((int16_t) val);
-            //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int16_t *) Q)[i], (float) (((int16_t *) Q)[i] / Q_CONST));
+            //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int16_t *) Q)[i], (float) (((int16_t *) Q)[i] / scale));
         }
     }
     else if (q == INT8){
         for (int i=0; i<num_elem; i++){
-            float val = S[i] * Q_CONST;
+            float val = S[i] * scale;
             if (((int64_t) val) > INT8_MAX) ((int8_t *) Q)[i] = INT8_MAX;
             else if (((int64_t) val) < INT8_MIN) ((int8_t *) Q)[i] = INT8_MIN;
             else ((int8_t *) Q)[i] = ((int8_t) val);
-            //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int8_t *) Q)[i], (float) (((int8_t *) Q)[i] / Q_CONST));
+            //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int8_t *) Q)[i], (float) (((int8_t *) Q)[i] / scale));
         }
     }
     return Q;
@@ -230,7 +229,20 @@ int main(int argc, char **argv){
     PW_H = (KW + 1)/2;
     PW_L = KW - PW_H;
 
-
+    // determine scaling factor
+    float mean = 0;
+    for (int i=0; i<N * H * W * C; i++){
+        mean += I[i];
+    }
+    mean /= N * H * W * C;
+    float std = 0;
+    for (int i=0; i<N * H * W * C; i++){
+        std += pow(I[i] - mean, 2);
+    }
+    std /= N * H * W * C;
+    std = sqrt(std);
+    printf("%f\n", std);
+    float scale = (2<<qbits-1) / std;
 
     // quantization
     #ifdef DEBUG
@@ -238,8 +250,8 @@ int main(int argc, char **argv){
     #endif
     clock_t start, end;
     start = clock();
-    void * I_Q = quantize(I, q, qsize, N * H * W * C);
-    void * K_Q = quantize(K, q, qsize, KH * KW * OC * IC);
+    void * I_Q = quantize(I, q, qsize, scale, N * H * W * C);
+    void * K_Q = quantize(K, q, qsize, scale, KH * KW * OC * IC);
     end = clock();
     float qtime = ((float) (end - start)) / CLOCKS_PER_SEC;
 
@@ -260,7 +272,7 @@ int main(int argc, char **argv){
                     // convolution for a single output pixel
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
                     convolve_quantized(I_Q, K_Q, n, h, w, oc, q, ret);
-                    O[output_idx] = (((float) ret->ret32) + ((float) ret->ret16) + ((float) ret->ret8)) / (Q_CONST * Q_CONST);
+                    O[output_idx] = (((float) ret->ret32) + ((float) ret->ret16) + ((float) ret->ret8)) / (scale * scale);
                     //printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
                 }
             }
@@ -270,7 +282,7 @@ int main(int argc, char **argv){
     end = clock();
     float ctime = ((float) (end - start)) / CLOCKS_PER_SEC;
     #ifndef DO_NRMSE
-    printf("main: (INT%2.0d, S=%d) -> quantize %f,\tconvolution %f\n", qbits, (int)Q_CONST, qtime, ctime);
+    printf("main: (INT%2.0d, S=%.3f) -> quantize %f,\tconvolution %f\n", qbits, scale, qtime, ctime);
     #endif
 
 
@@ -287,7 +299,7 @@ int main(int argc, char **argv){
                 for (int oc=0; oc<OC; oc++){
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
                     convolve_quantized(I_Q, K_Q, n, h, w, oc, q, nrmnse_ret);
-                    float x = (((float) ret->ret32) + ((float) ret->ret16) + ((float) ret->ret8)) / (Q_CONST * Q_CONST);
+                    float x = (((float) ret->ret32) + ((float) ret->ret16) + ((float) ret->ret8)) / (scale * scale);
                     float y = convolve(I, K, n, h, w, oc);
                     acc += (x - y)*(x - y);
                     if (ymax<y) ymax = y;
@@ -298,7 +310,7 @@ int main(int argc, char **argv){
     }
     free(nrmnse_ret);
     float NRMSE = sqrt(acc / (N*H*W*OC))/(ymax-ymin);
-    printf("main: (INT%2.0d, S=%d) -> NRMSE=%.20f\n", qbits, (int)Q_CONST, NRMSE);
+    printf("main: (INT%2.0d, S=%.3f) -> NRMSE=%.20f\n", qbits, scale, NRMSE);
     #endif
     ///////////////////////////////////////////precision analysis///////////////////////////////////////////
 
