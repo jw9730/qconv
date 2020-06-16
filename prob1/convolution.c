@@ -14,6 +14,14 @@ int N, H, W, C;
 int KH, KW, OC, IC;
 int PH_L, PH_H, PW_L, PW_H;
 
+void validity_check(float * ARR, int n){
+    float acc = 0;
+    for (int i=0; i<n; i++){
+        acc += ARR[i];
+    }
+    printf("validity_check, mean %f\n", acc/n);
+}
+
 float convolve(float * I, float * K, int n, int h, int w, int oc){
     // gets input and kernel array of same size, outputs a convolved output value, assume zero padding
     // (padded) input boundary corresponding to window
@@ -93,6 +101,9 @@ int main(int argc, char **argv){
         printf("main: output memory allocation failure\n");
         exit(-1);
     }
+    validity_check(I, N * H * W * C);
+    validity_check(K, KH * KW * OC * IC);
+    validity_check(O, N * H * W * OC);
     #ifdef DEBUG
     printf("main: I %p, K %p, O %p, align_bytes %lu, sizeof(float) %lu\n", I, K, O, align_bytes, sizeof(float));
     #endif
