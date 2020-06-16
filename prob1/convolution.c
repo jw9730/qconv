@@ -27,16 +27,12 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
         for (int kh=0; kh<KH; kh++){
             for (int kw=0; kw<KW; kw++){
                 flag = (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W);
+                //printf("\t+= I[%d,%d/%d,%d/%d,%d/%d] * K[%d,%d,%d,%d], out-of-bounds: %d\n", n, IH_L+kh, H-1, IW_L+kw, W-1, ic, IC-1, kh, kw, oc, ic, flag);    
                 if (flag) {
                     continue;
                 }
                 input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                 kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                if (h == 2 && w == 1){
-                    printf("\t+= I[%d,%d/%d,%d/%d,%d/%d] * K[%d,%d,%d,%d], out-of-bounds: %d\n", n, IH_L+kh, H-1, IW_L+kw, W-1, ic, IC-1, kh, kw, oc, ic, flag);
-                    printf("\t\tI[%d/%d], K[%d/%d]\n", input_idx, N*H*W*C, kernel_idx, KH*KW*OC*IC);
-                    printf("\t\t%f, %f\n", I[input_idx], K[kernel_idx]);
-                }
                 ret += I[input_idx] * K[kernel_idx];
             }
         }
@@ -125,9 +121,9 @@ int main(int argc, char **argv){
                 for (int oc=0; oc<OC; oc++){
                     // convolution for a single output pixel
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                    printf("main: compute O[%d,%d,%d,%d], currently %0.3f\n", n, h, w, oc, O[output_idx]);
+                    //printf("main: compute O[%d,%d,%d,%d], currently %0.3f\n", n, h, w, oc, O[output_idx]);
                     O[output_idx] = convolve(I, K, n, h, w, oc);
-                    printf("main: O[%d,%d,%d,%d] = %0.3f\n", n, h, w, oc, O[output_idx]);
+                    //printf("main: O[%d,%d,%d,%d] = %0.3f\n", n, h, w, oc, O[output_idx]);
                 }
             }
         }
