@@ -16,7 +16,7 @@
 
 //#define DO_NRMSE
 
-#define Q_CONST 1e3
+#define Q_CONST 64
 int qbits;
 typedef enum qenum{
     INT32,
@@ -239,7 +239,7 @@ int main(int argc, char **argv){
                         O[output_idx] = ((float) ((int8_t) val)) / (Q_CONST * Q_CONST);
                     }
                     else continue;
-                    printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
+                    //printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
                 }
             }
         }
