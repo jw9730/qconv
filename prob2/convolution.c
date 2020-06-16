@@ -214,9 +214,7 @@ int main(int argc, char **argv){
     void * I_Q = quantize(I, q, qsize, N * H * W * C);
     void * K_Q = quantize(K, q, qsize, KH * KW * OC * IC);
     end = clock();
-    #ifndef DO_NRMSE
-    printf("main: (INT%2.0d, S=%d) -> quantization %f\n", qbits, (int)Q_CONST, ((float) (end - start)) / CLOCKS_PER_SEC);
-    #endif
+    float qtime = ((float) (end - start)) / CLOCKS_PER_SEC;
 
 
     #ifdef DEBUG
@@ -230,16 +228,17 @@ int main(int argc, char **argv){
                 for (int oc=0; oc<OC; oc++){
                     // convolution for a single output pixel
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
+                    int64_t val = convolve_quantized(I_Q, K_Q, n, h, w, oc, q);
                     if (q == INT32){
-                        O[output_idx] = ((float) (int32_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q)) / (Q_CONST * Q_CONST);
+                        O[output_idx] = ((float) ((int32_t) val)) / (Q_CONST * Q_CONST);
                         //printf("main: O[%d,%d,%d,%d]: %d (quantized), %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((int32_t *) O_Q)[output_idx], (float)(((int32_t *) O_Q)[output_idx]) / (Q_CONST * Q_CONST), convolve(I, K, n, h, w, oc));
                     }
                     else if (q == INT16){
-                        O[output_idx] = ((float) (int16_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q)) / (Q_CONST * Q_CONST);
+                        O[output_idx] = ((float) ((int16_t) val)) / (Q_CONST * Q_CONST);
                         //printf("main: O[%d,%d,%d,%d]: %d (quantized), %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((int16_t *) O_Q)[output_idx], (float)(((int16_t *) O_Q)[output_idx]) / (Q_CONST * Q_CONST), convolve(I, K, n, h, w, oc));
                     }
                     else if (q == INT8){
-                        O[output_idx] = ((float) (int8_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q)) / (Q_CONST * Q_CONST);
+                        O[output_idx] = ((float) ((int8_t) val)) / (Q_CONST * Q_CONST);
                         //printf("main: O[%d,%d,%d,%d]: %d (quantized), %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((int8_t *) O_Q)[output_idx], (float)(((int8_t *) O_Q)[output_idx]) / (Q_CONST * Q_CONST), convolve(I, K, n, h, w, oc));
                     }
                     else continue;
@@ -248,8 +247,9 @@ int main(int argc, char **argv){
         }
     }
     end = clock();
+    float ctime = ((float) (end - start)) / CLOCKS_PER_SEC;
     #ifndef DO_NRMSE
-    printf("main: (INT%2.0d, S=%d) -> convolution %f\n", qbits, (int)Q_CONST, ((float) (end - start)) / CLOCKS_PER_SEC);
+    printf("main: (INT%2.0d, S=%d) -> quantize %f,\tconvolution %f\n", qbits, (int)Q_CONST, qtime, ctime);
     #endif
 
 
