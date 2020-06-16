@@ -13,10 +13,9 @@
 //#define CHECK_OVERFLOW
 //int max_size = ((qtype)~(qtype)0);
 
-#define DO_NRMSE
+//#define DO_NRMSE
 
-#define Q_CONST 1e4
-#define Q_CONST2 1e8
+#define Q_CONST 1e2
 int qbits;
 typedef enum qenum{
     INT32,
@@ -29,34 +28,51 @@ int N, H, W, C;
 int KH, KW, OC, IC;
 int PH_L, PH_H, PW_L, PW_H;
 
-void * quantize(float * S, enum qenum q, int num_elem){
-    // parse quantization type
-    typedef int64_t qtype;
-    if (q == INT32) {typedef int32_t qtype;}
-    else if (q == INT16) {typedef int16_t qtype;}
-    else if (q == INT8) {typedef int8_t qtype;}
-    else (assert(0));
-    qtype * Q;
+void * quantize(float * S, enum qenum q, int qsize, int num_elem){
     // allocate quantized array
-    assert(ALIGN_BYTES % sizeof(qtype) == 0);
+    assert(ALIGN_BYTES % qsize == 0);
+    void * Q;
     int rc;
-    if ((rc = posix_memalign((void **)&Q, ALIGN_BYTES, num_elem * sizeof(qtype))) != 0){
+    if ((rc = posix_memalign((void **)&Q, ALIGN_BYTES, num_elem * qsize)) != 0){
         printf("main: quantized memory allocation failure\n");
         exit(-1);
     }
     // amplify, typecast and copy
     for (int i=0; i<num_elem; i++){
-        Q[i] = (qtype) (S[i] * Q_CONST);
-        //printf("quantize: %f -> %d -> %f\n", S[i], (int)Q[i], (float) (Q[i] / Q_CONST));
+        float val = S[i] * Q_CONST;
+        if (q == INT32){
+            ((int32_t *) Q)[i] = ((int64_t) val > INT32_MAX) ? INT32_MAX : ((int32_t) val);
+            //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int32_t *) Q)[i], (float) (((int32_t *) Q)[i] / Q_CONST));
+        }
+        else if (q == INT16){
+            ((int16_t *) Q)[i] = ((int64_t) val > INT16_MAX) ? INT16_MAX : ((int16_t) val);
+            //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int16_t *) Q)[i], (float) (((int16_t *) Q)[i] / Q_CONST));
+        }
+        else if (q == INT8){
+            ((int8_t *) Q)[i] = ((int64_t) val > INT8_MAX) ? INT8_MAX : ((int8_t) val);
+            //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int8_t *) Q)[i], (float) (((int8_t *) Q)[i] / Q_CONST));
+        }
+        else continue;
     }
     return Q;
 }
 
-void restore_product(float * S, float * Q, enum qenum q, int num_elem){
+void restore_product(float * S, void * Q, enum qenum q, int num_elem){
     // restore quantization
     for (int i=0; i<num_elem; i++){
-        S[i] = (float) (Q[i] / Q_CONST2);
-        //printf("restore: %d -> %f\n", Q[i], S[i]);
+        if (q == INT32){
+            S[i] = ((float) ((int32_t *) Q)[i]) / (Q_CONST * Q_CONST);
+            //printf("restore: %d -> %f\n", ((int32_t *) Q)[i], S[i]);
+        }
+        else if (q == INT16){
+            S[i] = ((float) ((int16_t *) Q)[i]) / (Q_CONST * Q_CONST);
+            //printf("restore: %d -> %f\n", ((int16_t *) Q)[i], S[i]);
+        }
+        else if (q == INT8){
+            S[i] = ((float) ((int8_t *) Q)[i]) / (Q_CONST * Q_CONST);
+            //printf("restore: %d -> %f\n", ((int8_t *) Q)[i], S[i]);
+        }
+        else continue;
     }
 }
 
@@ -82,17 +98,13 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
 }
 
 int64_t convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, enum qenum q){
-    // parse quantization type
-    typedef int64_t qtype;
-    if (q == INT32) {typedef int32_t qtype;}
-    else if (q == INT16) {typedef int16_t qtype;}
-    else if (q == INT8) {typedef int8_t qtype;}
-    qtype * I_qtype = (qtype *) I_Q;
-    qtype * K_qtype = (qtype *) K_Q;
+    // conditional
+    int32_t ret32 = 0;
+    int16_t ret16 = 0;
+    int8_t ret8 = 0;
     // convolve
     int IH_L = h - PH_L;
     int IW_L = w - PW_L;
-    qtype ret = 0;
     int flag;
     for (int ic=0; ic<IC; ic++){
         for (int kh=0; kh<KH; kh++){
@@ -101,11 +113,28 @@ int64_t convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, 
                 if (flag) continue;
                 int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                 int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                ret += I_qtype[input_idx] * K_qtype[kernel_idx];
+                if (q == INT32) {
+                    ret32 += ((int32_t *) I_Q)[input_idx] * ((int32_t *) K_Q)[kernel_idx];
+                } else if (q == INT16){
+                    ret16 += ((int16_t *) I_Q)[input_idx] * ((int16_t *) K_Q)[kernel_idx];
+                } else if (q == INT8){
+                    ret8 += ((int8_t *) I_Q)[input_idx] * ((int8_t *) K_Q)[kernel_idx];
+                } else continue;
             }
         }
     }
-    return (int64_t) ret;
+    if (q == INT32){
+        assert (ret16 == 0 && ret8 == 0);
+        return (int64_t) ret32;
+    } else if (q == INT16){
+        assert (ret32 == 0 && ret8 == 0);
+        return (int64_t) ret16;
+    } else if (q == INT8){
+        assert (ret32 == 0 && ret16 == 0);
+        return (int64_t) ret8;
+    } else {
+        exit(-1);
+    }
 }
 
 int main(int argc, char **argv){
@@ -129,18 +158,18 @@ int main(int argc, char **argv){
     // quantization bits
     qbits = atoi(argv[3]);
     enum qenum q;
-    typedef float qtype;
+    int qsize = 0;
     if (qbits == 32) {
         q = INT32;
-        typedef int32_t qtype;
+        qsize = sizeof(int32_t);
     }
     else if (qbits == 16) {
         q = INT16;
-        typedef int16_t qtype;
+        qsize = sizeof(int16_t);
     }
     else if (qbits == 8) {
         q = INT8;
-        typedef int8_t qtype;
+        qsize = sizeof(int8_t);
     }
     else {
         printf("main: quantization bit should be 32, 16 or 8, got %d\n", qbits);
@@ -198,19 +227,22 @@ int main(int argc, char **argv){
 
 
     // quantization routine
+    #ifdef DEBUG
+    printf("main: quantization bit %d\n", qbits);
+    #endif
     clock_t start, end;
     start = clock();
-    qtype * O_Q;
-    assert(ALIGN_BYTES % sizeof(qtype) == 0);
-    if ((rc = posix_memalign((void **)&O_Q, ALIGN_BYTES, N * H * W * OC * sizeof(qtype))) != 0){
+    void * O_Q;
+    assert(ALIGN_BYTES % qsize == 0);
+    if ((rc = posix_memalign((void **)&O_Q, ALIGN_BYTES, N * H * W * OC * qsize)) != 0){
         printf("main: output memory allocation failure\n");
         exit(-1);
     }
-    qtype * I_Q = quantize(I, q, N * H * W * C);
-    qtype * K_Q = quantize(K, q, KH * KW * OC * IC);
+    void * I_Q = quantize(I, q, qsize, N * H * W * C);
+    void * K_Q = quantize(K, q, qsize, KH * KW * OC * IC);
     end = clock();
     #ifndef DO_NRMSE
-    printf("main: quantization elapsed time: %f\n", ((float) (end - start)) / CLOCKS_PER_SEC);
+    printf("main: (INT%2.0d, S=%d) -> quantization elapsed time: %f\n", qbits, (int)Q_CONST, ((float) (end - start)) / CLOCKS_PER_SEC);
     #endif
 
 
@@ -226,8 +258,19 @@ int main(int argc, char **argv){
                 for (int oc=0; oc<OC; oc++){
                     // convolution for a single output pixel
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                    O_Q[output_idx] = (qtype) convolve_quantized(I_Q, K_Q, n, h, w, oc, q);
-                    //printf("main: O[%d,%d,%d,%d]: %d (quantized), %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, (int) O_Q[output_idx], (float)(O_Q[output_idx] / (qtype) ((int) Q_CONST2)), convolve(I, K, n, h, w, oc));
+                    if (q == INT32){
+                        ((int32_t *) O_Q)[output_idx] = (int32_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q);
+                        //printf("main: O[%d,%d,%d,%d]: %d (quantized), %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((int32_t *) O_Q)[output_idx], (float)(((int32_t *) O_Q)[output_idx]) / (Q_CONST * Q_CONST), convolve(I, K, n, h, w, oc));
+                    }
+                    else if (q == INT16){
+                        ((int16_t *) O_Q)[output_idx] = (int16_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q);
+                        //printf("main: O[%d,%d,%d,%d]: %d (quantized), %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((int16_t *) O_Q)[output_idx], (float)(((int16_t *) O_Q)[output_idx]) / (Q_CONST * Q_CONST), convolve(I, K, n, h, w, oc));
+                    }
+                    else if (q == INT8){
+                        ((int8_t *) O_Q)[output_idx] = (int8_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q);
+                        //printf("main: O[%d,%d,%d,%d]: %d (quantized), %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((int8_t *) O_Q)[output_idx], (float)(((int8_t *) O_Q)[output_idx]) / (Q_CONST * Q_CONST), convolve(I, K, n, h, w, oc));
+                    }
+                    else continue;
                 }
             }
         }
@@ -236,7 +279,7 @@ int main(int argc, char **argv){
 
     end = clock();
     #ifndef DO_NRMSE
-    printf("main: convolution elapsed time: %f\n", ((float) (end - start)) / CLOCKS_PER_SEC);
+    printf("main: (INT%2.0d, S=%d) -> convolution elapsed time: %f\n", qbits, (int)Q_CONST, ((float) (end - start)) / CLOCKS_PER_SEC);
     #endif
 
 
@@ -251,7 +294,17 @@ int main(int argc, char **argv){
             for (int w=0; w<W; w++){
                 for (int oc=0; oc<OC; oc++){
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                    float x = (float) (((qtype) convolve_quantized(I_Q, K_Q, n, h, w, oc, q)) / Q_CONST2);
+                    float x;
+                    if (q == INT32){
+                        x = ((float) ((int32_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q))) / (Q_CONST * Q_CONST);
+                    }
+                    else if (q == INT16){
+                        x = ((float) ((int16_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q))) / (Q_CONST * Q_CONST);
+                    }
+                    else if (q == INT8){
+                        x = ((float) ((int8_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q))) / (Q_CONST * Q_CONST);
+                    }
+                    else continue;
                     float y = convolve(I, K, n, h, w, oc);
                     acc += (x - y)*(x - y);
                     if (ymax<y) ymax = y;
