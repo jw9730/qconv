@@ -231,17 +231,15 @@ int main(int argc, char **argv){
                     int64_t val = convolve_quantized(I_Q, K_Q, n, h, w, oc, q);
                     if (q == INT32){
                         O[output_idx] = ((float) ((int32_t) val)) / (Q_CONST * Q_CONST);
-                        //printf("main: O[%d,%d,%d,%d]: %d (quantized), %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((int32_t *) O_Q)[output_idx], (float)(((int32_t *) O_Q)[output_idx]) / (Q_CONST * Q_CONST), convolve(I, K, n, h, w, oc));
-                    }
+                        }
                     else if (q == INT16){
                         O[output_idx] = ((float) ((int16_t) val)) / (Q_CONST * Q_CONST);
-                        //printf("main: O[%d,%d,%d,%d]: %d (quantized), %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((int16_t *) O_Q)[output_idx], (float)(((int16_t *) O_Q)[output_idx]) / (Q_CONST * Q_CONST), convolve(I, K, n, h, w, oc));
                     }
                     else if (q == INT8){
                         O[output_idx] = ((float) ((int8_t) val)) / (Q_CONST * Q_CONST);
-                        //printf("main: O[%d,%d,%d,%d]: %d (quantized), %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((int8_t *) O_Q)[output_idx], (float)(((int8_t *) O_Q)[output_idx]) / (Q_CONST * Q_CONST), convolve(I, K, n, h, w, oc));
                     }
                     else continue;
+                    printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
                 }
             }
         }
