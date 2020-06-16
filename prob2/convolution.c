@@ -17,7 +17,7 @@ struct ret{
 };
 
 //#define DEBUG
-#define DO_NRMSE
+//#define DO_NRMSE
 
 int qbits;
 typedef enum qenum{
@@ -233,7 +233,7 @@ int main(int argc, char **argv){
     float scale;
     if (q == INT32) scale = 1<<10;
     if (q == INT16) scale = 1<<6;
-    if (q == INT8) scale = 1<<0;
+    if (q == INT8) scale = 1<<1;
 
     // quantization
     #ifdef DEBUG
