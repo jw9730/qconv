@@ -34,7 +34,7 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
                 kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
                 if (h == 2 && w == 1){
                     printf("\t+= I[%d,%d/%d,%d/%d,%d/%d] * K[%d,%d,%d,%d], out-of-bounds: %d\n", n, IH_L+kh, H-1, IW_L+kw, W-1, ic, IC-1, kh, kw, oc, ic, flag);
-                    printf("\t\tI[%d], K[%d]\n", input_idx, kernel_idx);
+                    printf("\t\tI[%d/%d], K[%d/%d]\n", input_idx, N*H*W*C, kernel_idx, KH*KW*OC*IC);
                     printf("\t\t%f, %f\n", I[input_idx], K[kernel_idx]);
                 }
                 ret += I[input_idx] * K[kernel_idx];
