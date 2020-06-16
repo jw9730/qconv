@@ -14,14 +14,6 @@ int N, H, W, C;
 int KH, KW, OC, IC;
 int PH_L, PH_H, PW_L, PW_H;
 
-void validity_check(float * ARR, int n){
-    float acc = 0;
-    for (int i=0; i<n; i++){
-        acc += ARR[i];
-    }
-    printf("validity_check, mean %f\n", acc/n);
-}
-
 float convolve(float * I, float * K, int n, int h, int w, int oc){
     // gets input and kernel array of same size, outputs a convolved output value, assume zero padding
     // (padded) input boundary corresponding to window
@@ -36,11 +28,11 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
                 if (flag) {
                     continue;
                 }
+                int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, OC);
+                int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
                 if (h == 2 && w == 1){
                     printf("\t+= I[%d,%d/%d,%d/%d,%d/%d] * K[%d,%d,%d,%d], out-of-bounds: %d\n", n, IH_L+kh, H-1, IW_L+kw, W-1, ic, IC-1, kh, kw, oc, ic, flag);
                 }
-                int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, OC);
-                int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
                 ret += I[input_idx] * K[kernel_idx];
             }
         }
@@ -101,9 +93,6 @@ int main(int argc, char **argv){
         printf("main: output memory allocation failure\n");
         exit(-1);
     }
-    validity_check(I, N * H * W * C);
-    validity_check(K, KH * KW * OC * IC);
-    validity_check(O, N * H * W * OC);
     #ifdef DEBUG
     printf("main: I %p, K %p, O %p, align_bytes %lu, sizeof(float) %lu\n", I, K, O, align_bytes, sizeof(float));
     #endif
