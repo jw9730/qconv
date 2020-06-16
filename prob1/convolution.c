@@ -4,7 +4,7 @@
 #include <errno.h>
 #include <time.h>
 
-//#define DEBUG
+#define DEBUG
 #define INDEX_ROW_MAJOR_2(i, j, I, J) ((j) + (J) * (i))
 #define INDEX_ROW_MAJOR_3(i, j, k, I, J, K) ((k) + (K) * ((j) + (J) * (i)))
 #define INDEX_ROW_MAJOR_4(i, j, k, l, I, J, K, L) ((l) + (L) * ((k) + (K) * ((j) + (J) * (i))))
@@ -25,7 +25,7 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
         for (int kh=0; kh<KH; kh++){
             for (int kw=0; kw<KW; kw++){
                 flag = (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W);
-                //printf("\t+= I[%d,%d,%d,%d] * K[%d,%d,%d,%d], out-of-bounds: %d \n", n, IH_L+kh, IW_L+kw, ic, kh, kw, oc, ic, flag);
+                printf("\t+= I[%d,%d,%d,%d] * K[%d,%d,%d,%d], out-of-bounds: %d \n", n, IH_L+kh, IW_L+kw, ic, kh, kw, oc, ic, flag);
                 if (flag) continue;
                 int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, OC);
                 int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
