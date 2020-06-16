@@ -16,7 +16,7 @@
 
 //#define DO_NRMSE
 
-#define Q_CONST 1e5
+#define Q_CONST 1e3
 int qbits;
 typedef enum qenum{
     INT32,
