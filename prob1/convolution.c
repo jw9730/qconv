@@ -119,7 +119,7 @@ int main(int argc, char **argv){
                 for (int oc=0; oc<OC; oc++){
                     // convolution for a single output pixel
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                    printf("main: O[%d,%d,%d,%d] = %0.3f\n", n, h, w, oc, O[output_idx]);
+                    printf("main: O[%d,%d,%d,%d] = ?\n", n, h, w, oc, O[output_idx]);
                     O[output_idx] = convolve(I, K, n, h, w, oc);
                     printf("main: O[%d,%d,%d,%d] = %0.3f\n", n, h, w, oc, O[output_idx]);
                 }
