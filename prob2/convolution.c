@@ -303,7 +303,7 @@ int main(int argc, char **argv){
     }
     fwrite(O, sizeof(float), N * H * W * OC, ofptr);
     fclose(ofptr);
-    free(I_Q); free(K_Q); free(O_Q);
+    free(I_Q); free(K_Q);
     free(I); free(K); free(O);
     return 0;
 }
