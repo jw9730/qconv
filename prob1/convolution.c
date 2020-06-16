@@ -4,7 +4,7 @@
 #include <errno.h>
 #include <time.h>
 
-#define DEBUG
+//#define DEBUG
 #define INDEX_ROW_MAJOR_2(i, j, I, J) ((j) + (J) * (i))
 #define INDEX_ROW_MAJOR_3(i, j, k, I, J, K) ((k) + (K) * ((j) + (J) * (i)))
 #define INDEX_ROW_MAJOR_4(i, j, k, l, I, J, K, L) ((l) + (L) * ((k) + (K) * ((j) + (J) * (i))))
