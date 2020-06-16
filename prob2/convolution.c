@@ -106,13 +106,10 @@ int64_t convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, 
         }
     }
     if (q == INT32){
-        assert (ret16 == 0 && ret8 == 0);
         return (int64_t) ret32;
     } else if (q == INT16){
-        assert (ret32 == 0 && ret8 == 0);
         return (int64_t) ret16;
     } else if (q == INT8){
-        assert (ret32 == 0 && ret16 == 0);
         return (int64_t) ret8;
     } else {
         exit(-1);
