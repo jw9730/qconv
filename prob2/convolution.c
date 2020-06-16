@@ -10,12 +10,6 @@
 #define INDEX_ROW_MAJOR_4(i, j, k, l, I, J, K, L) ((l) + (L) * ((k) + (K) * ((j) + (J) * (i))))
 #define ALIGN_BYTES (sizeof(void *) * 2)
 
-struct ret{
-    int32_t ret32;
-    int16_t ret16;
-    int8_t ret8;
-};
-
 //#define DEBUG
 //#define DO_NRMSE
 
@@ -24,7 +18,7 @@ typedef enum qenum{
     INT32,
     INT16,
     INT8
-} DATATYPE; 
+} DATATYPE;
 
 FILE * ifptr, * kfptr, * ofptr;
 int N, H, W, C;
@@ -92,13 +86,14 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
     return ret;
 }
 
-void convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, enum qenum q, struct ret * ret){
+float convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, enum qenum q, float scale){
     // convolve
     int IH_L = h - PH_L;
     int IW_L = w - PW_L;
     int flag;
+    float ret = 0;
+    float scale2 = scale * scale;
     if (q == INT32){
-        int32_t ret32 = 0;
         for (int ic=0; ic<IC; ic++){
             for (int kh=0; kh<KH; kh++){
                 for (int kw=0; kw<KW; kw++){
@@ -106,14 +101,12 @@ void convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, enu
                     if (flag) continue;
                     int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                     int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                    ret32 += ((int32_t *) I_Q)[input_idx] * ((int32_t *) K_Q)[kernel_idx];
+                    ret += ((float) (((int32_t *) I_Q)[input_idx] * ((int32_t *) K_Q)[kernel_idx])) / scale2;
                 }
             }
         }
-        ret->ret32 = ret32;
     }
     else if (q == INT16){
-        int16_t ret16 = 0;
         for (int ic=0; ic<IC; ic++){
             for (int kh=0; kh<KH; kh++){
                 for (int kw=0; kw<KW; kw++){
@@ -121,14 +114,12 @@ void convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, enu
                     if (flag) continue;
                     int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                     int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                    ret16 += ((int16_t *) I_Q)[input_idx] * ((int16_t *) K_Q)[kernel_idx];
+                    ret += ((float) (((int16_t *) I_Q)[input_idx] * ((int16_t *) K_Q)[kernel_idx])) / scale2;
                 }
             }
         }
-        ret->ret16 = ret16;
     }
     else if (q == INT8){
-        int8_t ret8 = 0;
         for (int ic=0; ic<IC; ic++){
             for (int kh=0; kh<KH; kh++){
                 for (int kw=0; kw<KW; kw++){
@@ -136,13 +127,12 @@ void convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, enu
                     if (flag) continue;
                     int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                     int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                    ret8 += ((int8_t *) I_Q)[input_idx] * ((int8_t *) K_Q)[kernel_idx];
+                    ret += ((float) (((int8_t *) I_Q)[input_idx] * ((int8_t *) K_Q)[kernel_idx])) / scale2;
                 }
             }
         }
-        ret->ret8 = ret8;
     }
-    return;
+    return ret;
 }
 
 int main(int argc, char **argv){
@@ -231,9 +221,9 @@ int main(int argc, char **argv){
 
     // determine scaling factor
     float scale;
-    if (q == INT32) scale = 1<<10;
-    if (q == INT16) scale = 1<<6;
-    if (q == INT8) scale = 1<<1;
+    if (q == INT32) scale = 1e3;
+    if (q == INT16) scale = 1e2;
+    if (q == INT8) scale = 1e0;
 
     // quantization
     #ifdef DEBUG
@@ -252,24 +242,18 @@ int main(int argc, char **argv){
     #endif
     start = clock();
     // compute convolution (scalar operations)
-    struct ret * ret = malloc(sizeof(struct ret));
-    ret->ret32 = 0;
-    ret->ret16 = 0;
-    ret->ret8 = 0;
     for (int n=0; n<N; n++){
         for (int h=0; h<H; h++){
             for (int w=0; w<W; w++){
                 for (int oc=0; oc<OC; oc++){
                     // convolution for a single output pixel
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                    convolve_quantized(I_Q, K_Q, n, h, w, oc, q, ret);
-                    O[output_idx] = (((float) ret->ret32) + ((float) ret->ret16) + ((float) ret->ret8)) / (scale * scale);
-                    //printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
+                    O[output_idx] = convolve_quantized(I_Q, K_Q, n, h, w, oc, q, scale);
+                    //if (oc==0) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
                 }
             }
         }
     }
-    free(ret);
     end = clock();
     float ctime = ((float) (end - start)) / CLOCKS_PER_SEC;
     #ifndef DO_NRMSE
@@ -283,14 +267,12 @@ int main(int argc, char **argv){
     float ymax = -1e15;
     float ymin = 1e15;
     float acc = 0;
-    struct ret * nrmnse_ret = malloc(sizeof(struct ret));
     for (int n=0; n<N; n++){
         for (int h=0; h<H; h++){
             for (int w=0; w<W; w++){
                 for (int oc=0; oc<OC; oc++){
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                    convolve_quantized(I_Q, K_Q, n, h, w, oc, q, nrmnse_ret);
-                    float x = (((float) ret->ret32) + ((float) ret->ret16) + ((float) ret->ret8)) / (scale * scale);
+                    float x = convolve_quantized(I_Q, K_Q, n, h, w, oc, q, scale);
                     float y = convolve(I, K, n, h, w, oc);
                     acc += (x - y)*(x - y);
                     if (ymax<y) ymax = y;
@@ -299,7 +281,6 @@ int main(int argc, char **argv){
             }
         }
     }
-    free(nrmnse_ret);
     float NRMSE = sqrt(acc / (N*H*W*OC))/(ymax-ymin);
     printf("main: (INT%2.0d, S=%.3f) -> NRMSE=%.20f\n", qbits, scale, NRMSE);
     #endif
