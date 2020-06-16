@@ -17,7 +17,7 @@ struct ret{
 };
 
 //#define DEBUG
-//#define DO_NRMSE
+#define DO_NRMSE
 
 int qbits;
 typedef enum qenum{
@@ -230,19 +230,10 @@ int main(int argc, char **argv){
     PW_L = KW - PW_H;
 
     // determine scaling factor
-    float mean = 0;
-    for (int i=0; i<N * H * W * C; i++){
-        mean += I[i];
-    }
-    mean /= N * H * W * C;
-    float std = 0;
-    for (int i=0; i<N * H * W * C; i++){
-        std += pow(I[i] - mean, 2);
-    }
-    std /= N * H * W * C;
-    std = sqrt(std);
-    printf("%f\n", std);
-    float scale = (2<<qbits-1) / std;
+    float scale;
+    if (q == INT32) scale = 1<<10;
+    if (q == INT16) scale = 1<<6;
+    if (q == INT8) scale = 1<<0;
 
     // quantization
     #ifdef DEBUG
@@ -282,7 +273,7 @@ int main(int argc, char **argv){
     end = clock();
     float ctime = ((float) (end - start)) / CLOCKS_PER_SEC;
     #ifndef DO_NRMSE
-    printf("main: (INT%2.0d, S=%.3f) -> quantize %f,\tconvolution %f\n", qbits, scale, qtime, ctime);
+    printf("main: (INT%2.0d, S=%.3f) -> quantize %f, convolution %f\n", qbits, scale, qtime, ctime);
     #endif
 
 
