@@ -129,7 +129,7 @@ float convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, en
                     if (flag) continue;
                     int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                     int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                    //printf("%f <- %d = %d * %d\n", ((float) (((int8_t *) I_Q)[input_idx] * ((int8_t *) K_Q)[kernel_idx])) / scale2, ((int8_t *) I_Q)[input_idx] * ((int8_t *) K_Q)[kernel_idx], ((int8_t *) I_Q)[input_idx], ((int8_t *) K_Q)[kernel_idx]);
+                    //printf("%f <- %d = %d * %d\n", ((float) (((int8_t *) I_Q)[input_idx] * ((int8_t *) K_Q)[kernel_idx]) / scale2), ((int8_t *) I_Q)[input_idx] * ((int8_t *) K_Q)[kernel_idx], ((int8_t *) I_Q)[input_idx], ((int8_t *) K_Q)[kernel_idx]);
                     ret += ((float) (((int8_t *) I_Q)[input_idx] * ((int8_t *) K_Q)[kernel_idx]) / scale2);
                 }
             }
@@ -225,8 +225,8 @@ int main(int argc, char **argv){
     // determine scaling factor
     float scale;
     if (q == INT32) scale = 1e4;
-    if (q == INT16) scale = 1e3;
-    if (q == INT8) scale = 1e2;
+    if (q == INT16) scale = 1e2;
+    if (q == INT8) scale = 1e1;
 
     // quantization
     #ifdef DEBUG
