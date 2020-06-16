@@ -42,15 +42,15 @@ void * quantize(float * S, enum qenum q, int qsize, int num_elem){
     for (int i=0; i<num_elem; i++){
         float val = S[i] * Q_CONST;
         if (q == INT32){
-            ((int32_t *) Q)[i] = ((int64_t) val > INT32_MAX) ? INT32_MAX : ((int32_t) val);
+            ((int32_t *) Q)[i] = (((int64_t) val) > INT32_MAX) ? INT32_MAX : ((int32_t) val);
             //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int32_t *) Q)[i], (float) (((int32_t *) Q)[i] / Q_CONST));
         }
         else if (q == INT16){
-            ((int16_t *) Q)[i] = ((int64_t) val > INT16_MAX) ? INT16_MAX : ((int16_t) val);
+            ((int16_t *) Q)[i] = (((int64_t) val) > INT16_MAX) ? INT16_MAX : ((int16_t) val);
             //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int16_t *) Q)[i], (float) (((int16_t *) Q)[i] / Q_CONST));
         }
         else if (q == INT8){
-            ((int8_t *) Q)[i] = ((int64_t) val > INT8_MAX) ? INT8_MAX : ((int8_t) val);
+            ((int8_t *) Q)[i] = (((int64_t) val) > INT8_MAX) ? INT8_MAX : ((int8_t) val);
             //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int8_t *) Q)[i], (float) (((int8_t *) Q)[i] / Q_CONST));
         }
         else continue;
