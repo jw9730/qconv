@@ -26,8 +26,10 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
             for (int kw=0; kw<KW; kw++){
                 flag = (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W);
                 if (flag) {
-                    printf("\t+= I[%d,%d/%d,%d/%d,%d] * K[%d,%d,%d,%d], out-of-bounds: %d \n", n, IH_L+kh, H-1, IW_L+kw, W-1, ic, kh, kw, oc, ic, flag);
                     continue;
+                }
+                if (h == 2 && w == 1){
+                    printf("\t+= I[%d,%d/%d,%d/%d,%d] * K[%d,%d,%d,%d], out-of-bounds: %d \n", n, IH_L+kh, H-1, IW_L+kw, W-1, ic, kh, kw, oc, ic, flag);
                 }
                 int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, OC);
                 int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
