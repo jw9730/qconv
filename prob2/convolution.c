@@ -19,7 +19,7 @@ struct ret{
 //#define DEBUG
 //#define DO_NRMSE
 
-#define Q_CONST 10
+#define Q_CONST 1
 int qbits;
 typedef enum qenum{
     INT32,
