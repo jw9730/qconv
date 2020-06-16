@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#define DEBUG
 
 FILE * ifile, * kfile;
 size_t read_size;
@@ -8,10 +9,14 @@ size_t read_size;
 int
 main (int argc, char **argv)
 {
+    #ifdef DEBUG
+    printf("main: argc=%d\n", argc);
+    #endif
+
     assert (argc == 2);
     // open file
     if (argv[0] == NULL || argv[1] == NULL) {
-        printf("convolution [input_tensor.bin] [kernel_tensor.bin]\n");
+        printf("./convolution [input_tensor.bin] [kernel_tensor.bin]\n");
         exit(-1);
     }
     if (ifile = fopen(argv[0], "r") == NULL){
