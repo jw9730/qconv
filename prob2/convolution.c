@@ -58,25 +58,6 @@ void * quantize(float * S, enum qenum q, int qsize, int num_elem){
     return Q;
 }
 
-void restore_product(float * S, void * Q, enum qenum q, int num_elem){
-    // restore quantization
-    for (int i=0; i<num_elem; i++){
-        if (q == INT32){
-            S[i] = ((float) ((int32_t *) Q)[i]) / (Q_CONST * Q_CONST);
-            //printf("restore: %d -> %f\n", ((int32_t *) Q)[i], S[i]);
-        }
-        else if (q == INT16){
-            S[i] = ((float) ((int16_t *) Q)[i]) / (Q_CONST * Q_CONST);
-            //printf("restore: %d -> %f\n", ((int16_t *) Q)[i], S[i]);
-        }
-        else if (q == INT8){
-            S[i] = ((float) ((int8_t *) Q)[i]) / (Q_CONST * Q_CONST);
-            //printf("restore: %d -> %f\n", ((int8_t *) Q)[i], S[i]);
-        }
-        else continue;
-    }
-}
-
 float convolve(float * I, float * K, int n, int h, int w, int oc){
     // gets input and kernel array of same size, outputs a convolved output value, assume zero padding
     // (padded) input boundary corresponding to window
@@ -227,23 +208,17 @@ int main(int argc, char **argv){
 
 
 
-    // quantization routine
+    // quantization
     #ifdef DEBUG
     printf("main: quantization bit %d\n", qbits);
     #endif
     clock_t start, end;
     start = clock();
-    void * O_Q;
-    assert(ALIGN_BYTES % qsize == 0);
-    if ((rc = posix_memalign((void **)&O_Q, ALIGN_BYTES, N * H * W * OC * qsize)) != 0){
-        printf("main: output memory allocation failure\n");
-        exit(-1);
-    }
     void * I_Q = quantize(I, q, qsize, N * H * W * C);
     void * K_Q = quantize(K, q, qsize, KH * KW * OC * IC);
     end = clock();
     #ifndef DO_NRMSE
-    printf("main: (INT%2.0d, S=%d) -> quantization elapsed time: %f\n", qbits, (int)Q_CONST, ((float) (end - start)) / CLOCKS_PER_SEC);
+    printf("main: (INT%2.0d, S=%d) -> quantization %f\n", qbits, (int)Q_CONST, ((float) (end - start)) / CLOCKS_PER_SEC);
     #endif
 
 
@@ -251,7 +226,6 @@ int main(int argc, char **argv){
     printf("main: compute convolution into output @ %p\n", O);
     #endif
     start = clock();
-    
     // compute convolution (scalar operations)
     for (int n=0; n<N; n++){
         for (int h=0; h<H; h++){
@@ -260,15 +234,15 @@ int main(int argc, char **argv){
                     // convolution for a single output pixel
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
                     if (q == INT32){
-                        ((int32_t *) O_Q)[output_idx] = (int32_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q);
+                        O[output_idx] = ((float) (int32_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q)) / (Q_CONST * Q_CONST);
                         //printf("main: O[%d,%d,%d,%d]: %d (quantized), %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((int32_t *) O_Q)[output_idx], (float)(((int32_t *) O_Q)[output_idx]) / (Q_CONST * Q_CONST), convolve(I, K, n, h, w, oc));
                     }
                     else if (q == INT16){
-                        ((int16_t *) O_Q)[output_idx] = (int16_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q);
+                        O[output_idx] = ((float) (int16_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q)) / (Q_CONST * Q_CONST);
                         //printf("main: O[%d,%d,%d,%d]: %d (quantized), %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((int16_t *) O_Q)[output_idx], (float)(((int16_t *) O_Q)[output_idx]) / (Q_CONST * Q_CONST), convolve(I, K, n, h, w, oc));
                     }
                     else if (q == INT8){
-                        ((int8_t *) O_Q)[output_idx] = (int8_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q);
+                        O[output_idx] = ((float) (int8_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q)) / (Q_CONST * Q_CONST);
                         //printf("main: O[%d,%d,%d,%d]: %d (quantized), %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((int8_t *) O_Q)[output_idx], (float)(((int8_t *) O_Q)[output_idx]) / (Q_CONST * Q_CONST), convolve(I, K, n, h, w, oc));
                     }
                     else continue;
@@ -276,11 +250,9 @@ int main(int argc, char **argv){
             }
         }
     }
-    restore_product(O, O_Q, q, N * H * W * OC);
-
     end = clock();
     #ifndef DO_NRMSE
-    printf("main: (INT%2.0d, S=%d) -> convolution elapsed time: %f\n", qbits, (int)Q_CONST, ((float) (end - start)) / CLOCKS_PER_SEC);
+    printf("main: (INT%2.0d, S=%d) -> convolution %f\n", qbits, (int)Q_CONST, ((float) (end - start)) / CLOCKS_PER_SEC);
     #endif
 
 
