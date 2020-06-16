@@ -92,8 +92,8 @@ float convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, en
     int IW_L = w - PW_L;
     int flag;
     float ret = 0;
-    float scale2 = scale * scale;
     if (q == INT32){
+        int32_t scale2 = (int32_t) (scale * scale);
         for (int ic=0; ic<IC; ic++){
             for (int kh=0; kh<KH; kh++){
                 for (int kw=0; kw<KW; kw++){
@@ -101,12 +101,13 @@ float convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, en
                     if (flag) continue;
                     int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                     int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                    ret += ((float) (((int32_t *) I_Q)[input_idx] * ((int32_t *) K_Q)[kernel_idx])) / scale2;
+                    ret += ((float) (((int32_t *) I_Q)[input_idx] * ((int32_t *) K_Q)[kernel_idx]) / scale2);
                 }
             }
         }
     }
     else if (q == INT16){
+        int16_t scale2 = (int16_t) (scale * scale);
         for (int ic=0; ic<IC; ic++){
             for (int kh=0; kh<KH; kh++){
                 for (int kw=0; kw<KW; kw++){
@@ -114,12 +115,13 @@ float convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, en
                     if (flag) continue;
                     int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                     int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                    ret += ((float) (((int16_t *) I_Q)[input_idx] * ((int16_t *) K_Q)[kernel_idx])) / scale2;
+                    ret += ((float) (((int16_t *) I_Q)[input_idx] * ((int16_t *) K_Q)[kernel_idx]) / scale2);
                 }
             }
         }
     }
     else if (q == INT8){
+        int8_t scale2 = (int8_t) (scale * scale);
         for (int ic=0; ic<IC; ic++){
             for (int kh=0; kh<KH; kh++){
                 for (int kw=0; kw<KW; kw++){
@@ -128,7 +130,7 @@ float convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, en
                     int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                     int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
                     //printf("%f <- %d = %d * %d\n", ((float) (((int8_t *) I_Q)[input_idx] * ((int8_t *) K_Q)[kernel_idx])) / scale2, ((int8_t *) I_Q)[input_idx] * ((int8_t *) K_Q)[kernel_idx], ((int8_t *) I_Q)[input_idx], ((int8_t *) K_Q)[kernel_idx]);
-                    ret += ((float) (((int8_t *) I_Q)[input_idx] * ((int8_t *) K_Q)[kernel_idx])) / scale2;
+                    ret += ((float) (((int8_t *) I_Q)[input_idx] * ((int8_t *) K_Q)[kernel_idx]) / scale2);
                 }
             }
         }
