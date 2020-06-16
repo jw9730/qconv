@@ -19,7 +19,7 @@ struct ret{
 //#define DEBUG
 //#define DO_NRMSE
 
-#define Q_CONST 64
+#define Q_CONST 10
 int qbits;
 typedef enum qenum{
     INT32,
@@ -45,15 +45,21 @@ void * quantize(float * S, enum qenum q, int qsize, int num_elem){
     for (int i=0; i<num_elem; i++){
         float val = S[i] * Q_CONST;
         if (q == INT32){
-            ((int32_t *) Q)[i] = (((int64_t) val) > INT32_MAX) ? INT32_MAX : ((int32_t) val);
+            if (((int64_t) val) > INT32_MAX) ((int32_t *) Q)[i] = INT32_MAX;
+            else if (((int64_t) val) < INT32_MIN) ((int32_t *) Q)[i] = INT32_MIN;
+            else ((int32_t *) Q)[i] = ((int32_t) val);
             //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int32_t *) Q)[i], (float) (((int32_t *) Q)[i] / Q_CONST));
         }
         else if (q == INT16){
-            ((int16_t *) Q)[i] = (((int64_t) val) > INT16_MAX) ? INT16_MAX : ((int16_t) val);
+            if (((int64_t) val) > INT16_MAX) ((int16_t *) Q)[i] = INT16_MAX;
+            else if (((int64_t) val) < INT16_MIN) ((int16_t *) Q)[i] = INT16_MIN;
+            else ((int16_t *) Q)[i] = ((int16_t) val);
             //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int16_t *) Q)[i], (float) (((int16_t *) Q)[i] / Q_CONST));
         }
         else if (q == INT8){
-            ((int8_t *) Q)[i] = (((int64_t) val) > INT8_MAX) ? INT8_MAX : ((int8_t) val);
+            if (((int64_t) val) > INT8_MAX) ((int8_t *) Q)[i] = INT8_MAX;
+            else if (((int64_t) val) < INT8_MIN) ((int8_t *) Q)[i] = INT8_MIN;
+            else ((int8_t *) Q)[i] = ((int8_t) val);
             //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int8_t *) Q)[i], (float) (((int8_t *) Q)[i] / Q_CONST));
         }
         else continue;
@@ -111,6 +117,7 @@ void convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, enu
     ret->ret32 = ret32;
     ret->ret16 = ret16;
     ret->ret8 = ret8;
+    return;
 }
 
 int main(int argc, char **argv){
