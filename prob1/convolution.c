@@ -3,6 +3,7 @@
 #include <assert.h>
 
 FILE * ifile, * kfile;
+size_t read_size;
 
 int
 main (int argc, char **argv)
@@ -24,8 +25,8 @@ main (int argc, char **argv)
     // reading metadata
     int isize[4];
     int ksize[4];
-    fread(isize, sizeof(int), 4, ifile);
-    fread(ksize, sizeof(int), 4, kfile);
+    read_size = fread(isize, sizeof(int), 4, ifile);
+    read_size = fread(ksize, sizeof(int), 4, kfile);
     printf("(N, H, W, C) = (%d, %d, %d, %d)\n", isize[0], isize[1], isize[2], isize[3]);
     printf("(KH, KW, OC, IC) = (%d, %d, %d, %d)\n", ksize[0], ksize[1], ksize[2], ksize[3]);
 }
