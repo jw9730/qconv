@@ -10,10 +10,13 @@
 #define INDEX_ROW_MAJOR_4(i, j, k, l, I, J, K, L) ((l) + (L) * ((k) + (K) * ((j) + (J) * (i))))
 #define ALIGN_BYTES (sizeof(void *) * 2)
 
-//#define DEBUG
-//#define CHECK_OVERFLOW
-//int max_size = ((qtype)~(qtype)0);
+struct ret{
+    int32_t ret32;
+    int16_t ret16;
+    int8_t ret8;
+};
 
+//#define DEBUG
 //#define DO_NRMSE
 
 #define Q_CONST 64
@@ -79,7 +82,7 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
     return ret;
 }
 
-int64_t convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, enum qenum q){
+void convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, enum qenum q, struct ret * ret){
     // conditional
     int32_t ret32 = 0;
     int16_t ret16 = 0;
@@ -105,15 +108,9 @@ int64_t convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, 
             }
         }
     }
-    if (q == INT32){
-        return (int64_t) ret32;
-    } else if (q == INT16){
-        return (int64_t) ret16;
-    } else if (q == INT8){
-        return (int64_t) ret8;
-    } else {
-        exit(-1);
-    }
+    ret->ret32 = ret32;
+    ret->ret16 = ret16;
+    ret->ret8 = ret8;
 }
 
 int main(int argc, char **argv){
@@ -222,21 +219,22 @@ int main(int argc, char **argv){
     #endif
     start = clock();
     // compute convolution (scalar operations)
+    struct ret * ret = malloc(sizeof(struct ret));
     for (int n=0; n<N; n++){
         for (int h=0; h<H; h++){
             for (int w=0; w<W; w++){
                 for (int oc=0; oc<OC; oc++){
                     // convolution for a single output pixel
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                    int64_t val = convolve_quantized(I_Q, K_Q, n, h, w, oc, q);
+                    convolve_quantized(I_Q, K_Q, n, h, w, oc, q, ret);
                     if (q == INT32){
-                        O[output_idx] = ((float) ((int32_t) val)) / (Q_CONST * Q_CONST);
+                        O[output_idx] = ((float) ret->ret32) / (Q_CONST * Q_CONST);
                         }
                     else if (q == INT16){
-                        O[output_idx] = ((float) ((int16_t) val)) / (Q_CONST * Q_CONST);
+                        O[output_idx] = ((float) ret->ret16) / (Q_CONST * Q_CONST);
                     }
                     else if (q == INT8){
-                        O[output_idx] = ((float) ((int8_t) val)) / (Q_CONST * Q_CONST);
+                        O[output_idx] = ((float) ret->ret8) / (Q_CONST * Q_CONST);
                     }
                     else continue;
                     //printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
@@ -244,6 +242,7 @@ int main(int argc, char **argv){
             }
         }
     }
+    free(ret);
     end = clock();
     float ctime = ((float) (end - start)) / CLOCKS_PER_SEC;
     #ifndef DO_NRMSE
@@ -257,20 +256,22 @@ int main(int argc, char **argv){
     float ymax = -1e15;
     float ymin = 1e15;
     float acc = 0;
+    struct ret * nrmnse_ret = malloc(sizeof(struct ret));
     for (int n=0; n<N; n++){
         for (int h=0; h<H; h++){
             for (int w=0; w<W; w++){
                 for (int oc=0; oc<OC; oc++){
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
                     float x;
+                    convolve_quantized(I_Q, K_Q, n, h, w, oc, q, nrmnse_ret);
                     if (q == INT32){
-                        x = ((float) ((int32_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q))) / (Q_CONST * Q_CONST);
-                    }
+                        x = ((float) ret->ret32) / (Q_CONST * Q_CONST);
+                        }
                     else if (q == INT16){
-                        x = ((float) ((int16_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q))) / (Q_CONST * Q_CONST);
+                        x = ((float) ret->ret16) / (Q_CONST * Q_CONST);
                     }
                     else if (q == INT8){
-                        x = ((float) ((int8_t) convolve_quantized(I_Q, K_Q, n, h, w, oc, q))) / (Q_CONST * Q_CONST);
+                        x = ((float) ret->ret8) / (Q_CONST * Q_CONST);
                     }
                     else continue;
                     float y = convolve(I, K, n, h, w, oc);
@@ -281,6 +282,7 @@ int main(int argc, char **argv){
             }
         }
     }
+    free(nrmnse_ret);
     float NRMSE = sqrt(acc / (N*H*W*OC))/(ymax-ymin);
     printf("main: (INT%2.0d, S=%d) -> NRMSE=%.20f\n", qbits, (int)Q_CONST, NRMSE);
     #endif
