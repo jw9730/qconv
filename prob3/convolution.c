@@ -454,7 +454,7 @@ int main(int argc, char **argv){
         t_arg->offset = pix_per_thread * t;
         t_arg->num_pixels = (residue < pix_per_thread) ? residue : pix_per_thread;
         t_arg->scale2 = scale2;
-        pthread_create(tid + t, NULL, &conv_func, t_arg);
+        pthread_create(tid + t, NULL, conv_func, t_arg);
         residue -= pix_per_thread; t++; t_arg++;
     }
     for (int i=0; i<t; i++){
