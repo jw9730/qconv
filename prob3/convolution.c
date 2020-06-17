@@ -10,6 +10,7 @@
 #include <pthread.h>
 #define INDEX_ROW_MAJOR_4(i, j, k, l, I, J, K, L) ((l) + (L) * ((k) + (K) * ((j) + (J) * (i))))
 #define ALIGN_BYTES (sizeof(void *) * 2)
+#define MAX_THREADS 16
 typedef enum qenum{
     FP32,
     INT32,
@@ -25,6 +26,36 @@ FILE * ifptr, * kfptr, * ofptr;
 int N, H, W, C;
 int KH, KW, OC, IC;
 int PH_L, PH_H, PW_L, PW_H;
+
+struct t_arg{
+    void * I_Q;
+    void * K_Q;
+    float * O;
+    float (* qconv) (void *, void *, int, int, int, int);
+    int offset;
+    int num_pixels;
+};
+
+void conv_func(void * aux){
+    struct t_arg * t_arg = (struct t_arg *) aux;
+    void * I_Q = t_arg->I_Q;
+    void * K_Q = t_arg->K_Q;
+    float * O = t_arg->O;
+    float (* qconv) (void *, void *, int, int, int, int) = t_arg->qconv;
+    int offset = t_arg->offset;
+    int num_pixels = t_arg->num_pixels;
+    // parse input pixels and perform convolution
+    for (int i=0; i<num_pixels; i++){
+        int idx = offset + i;
+        int oc = idx % (N*H*W);
+        int w = idx / OC % (N*H);
+        int h = idx / OC / W % N;
+        int n = idx / OC / W / H;
+        printf("%d -> %d, %d, %d, %d\n", n, h, w, oc);
+        exit(-1);
+        O[idx] += qconv(I_Q, K_Q, n, h, w, oc);
+    }
+}
 
 void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
     // allocate quantized array
@@ -348,6 +379,22 @@ int main(int argc, char **argv){
 
 
 
+    ///////////////////////////////////////////setup threading///////////////////////////////////////////
+    int pix_per_thread = (N*H*W*OC + MAX_THREADS - 1) / MAX_THREADS;
+    int num_thread = N*H*W*OC/pix_per_thread;
+    pthread_t tid[MAX_THREADS];
+    struct t_arg t_args[MAX_THREADS];
+    printf("main: number of pixels %d, %d threads each with %d pixels will run\n", N*H*W*OC, pix_per_thread, num_thread);
+    ///////////////////////////////////////////setup threading///////////////////////////////////////////
+
+struct t_arg{
+    void * I_Q;
+    void * K_Q;
+    void * O;
+    float (* qconv) (void *, void *, int, int, int, int);
+    int offset;
+    int num_pixels;
+};
     ///////////////////////////////////////////main routine///////////////////////////////////////////
     // compute padding (TensorFlow pads more on higher index)
     PH_H = (KH + 1)/2;
@@ -358,7 +405,21 @@ int main(int argc, char **argv){
     printf("main: compute convolution into output @ %p\n", O);
     #endif
     start = clock();
-    // compute convolution (scalar operations)
+    int residue = N*H*W*OC;
+    struct t_arg * t_arg = t_args;
+    int t = 0;
+    while(residue>0){
+        t_arg->I_Q = I_Q;
+        t_arg->K_Q = K_Q;
+        t_arg->O = O;
+        t_arg->offset = pix_per_thread * t;
+        t_arg->num_pixels = (residue < pix_per_thread) ? residue : pix_per_thread;
+        pthread_create(tid[t], NULL, conv_func, t_arg);
+        residue -= pix_per_thread; t++; t_arg++;
+    }
+    for (int i=0; i<t; i++){
+        pthread_join(tid[i], NULL);
+    }
     for (int n=0; n<N; n++){
         for (int h=0; h<H; h++){
             for (int w=0; w<W; w++){
