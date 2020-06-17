@@ -85,10 +85,10 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
     }
     return ret;
 }
-float convolve_quantized8(void * I_Q, void * K_Q, int n, int h, int w, int oc){
+float convolve_quantized32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
     // convolve
-    int8_t * I = (int8_t *) I_Q;
-    int8_t * K = (int8_t *) K_Q;
+    int32_t * I = (int32_t *) I_Q;
+    int32_t * K = (int32_t *) K_Q;
     int IH_L = h - PH_L;
     int IW_L = w - PW_L;
     int flag;
@@ -100,7 +100,15 @@ float convolve_quantized8(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 if (flag) continue;
                 int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                 int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                ret += ((float) (I[input_idx] * K[kernel_idx]));
+                int32_t a = I[input_idx];
+                int32_t b = K[kernel_idx];
+                /*int32_t v = a * b;
+                if ((a != 0) && ((v / a) != b)) {
+                    if ((a > 0 && b > 0) || (a < 0 && b < 0)) v = INT32_MAX;
+                    else v = INT32_MIN;
+                }
+                ret += ((float) v);*/
+                ret += ((float) (a * b));
             }
         }
     }
@@ -121,16 +129,24 @@ float convolve_quantized16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 if (flag) continue;
                 int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                 int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                ret += ((float) (I[input_idx] * K[kernel_idx]));
+                int16_t a = I[input_idx];
+                int16_t b = K[kernel_idx];
+                /*int16_t v = a * b;
+                if ((a != 0) && ((v / a) != b)) {
+                    if ((a > 0 && b > 0) || (a < 0 && b < 0)) v = INT16_MAX;
+                    else v = INT16_MIN;
+                }
+                ret += ((float) v);*/
+                ret += ((float) (a * b));
             }
         }
     }
     return ret;
 }
-float convolve_quantized32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
+float convolve_quantized8(void * I_Q, void * K_Q, int n, int h, int w, int oc){
     // convolve
-    int32_t * I = (int32_t *) I_Q;
-    int32_t * K = (int32_t *) K_Q;
+    int8_t * I = (int8_t *) I_Q;
+    int8_t * K = (int8_t *) K_Q;
     int IH_L = h - PH_L;
     int IW_L = w - PW_L;
     int flag;
@@ -142,7 +158,15 @@ float convolve_quantized32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 if (flag) continue;
                 int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                 int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                ret += ((float) (I[input_idx] * K[kernel_idx]));
+                int8_t a = I[input_idx];
+                int8_t b = K[kernel_idx];
+                /*int8_t v = a * b;
+                if ((a != 0) && ((v / a) != b)) {
+                    if ((a > 0 && b > 0) || (a < 0 && b < 0)) ret += (float) INT8_MAX;
+                    else ret += (float) INT8_MIN;
+                }
+                else ret += ((float) v);*/
+                ret += ((float) (a * b));
             }
         }
     }
@@ -178,26 +202,23 @@ int main(int argc, char **argv){
         q = INT32;
         qsize = sizeof(int32_t);
         scale = 1<<13;
-        assert (INT32_MAX >= (scale * scale));
         qconv = &convolve_quantized32;
 
     } else if (qbits == 16) {
         q = INT16;
         qsize = sizeof(int16_t);
-        scale = 1<<7;
-        assert (INT16_MAX >= (scale * scale));
+        scale = 1<<8;
         qconv = &convolve_quantized16;
     } else if (qbits == 8) {
         q = INT8;
         qsize = sizeof(int8_t);
-        scale = 1<<3;
-        assert (INT8_MAX >= (scale * scale));
+        scale = 1<<5;
         qconv = &convolve_quantized8;
     } else {
         printf("main: quantization bit should be 32, 16 or 8, got %d\n", qbits);
         exit(-1);
     }
-    int scale2 = scale * scale;
+    float scale2 = scale * scale;
 
     // reading metadata
     int isize[4];
@@ -271,7 +292,7 @@ int main(int argc, char **argv){
                     // convolution for a single output pixel
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
                     O[output_idx] = qconv(I_Q, K_Q, n, h, w, oc) / scale2;
-                    if (oc==0) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
+                    //if (oc==0) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
                 }
             }
         }
