@@ -47,8 +47,7 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
 }
 
 
-//__global__
-void convolve_cuda(float *I, float *K, float *O, int N, int H, int W, int KH, int KW, int IC, int OC, int PH_L, int PW_L){
+__global__ void convolve_cuda(float *I, float *K, float *O, int N, int H, int W, int KH, int KW, int IC, int OC, int PH_L, int PW_L){
     // input stationary
     int BLOCKS_PER_PIXEL = ceil((float)(OC)/(float)(THREADS_PER_BLOCK));
     int bid = blockIdx.x;
