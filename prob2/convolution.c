@@ -86,14 +86,13 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
     return ret;
 }
 
-float convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, enum qenum q, float scale){
+float convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, enum qenum q, float scale2){
     // convolve
     int IH_L = h - PH_L;
     int IW_L = w - PW_L;
     int flag;
     float ret = 0;
     if (q == INT32){
-        int32_t scale2 = (int32_t) (scale * scale);
         int32_t * I = (int32_t *) I_Q;
         int32_t * K = (int32_t *) K_Q;
         for (int ic=0; ic<IC; ic++){
@@ -103,13 +102,13 @@ float convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, en
                     if (flag) continue;
                     int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                     int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                    ret += (float) (I[input_idx] * K[kernel_idx] / scale2);
+                    //printf("%f <- %d = %d * %d\n", ((float) (I[input_idx] * K[kernel_idx])) / scale2, I[input_idx] * K[kernel_idx], I[input_idx], K[kernel_idx]);
+                    ret += ((float) I[input_idx] * K[kernel_idx]) / scale2;
                 }
             }
         }
     }
     else if (q == INT16){
-        int16_t scale2 = (int16_t) (scale * scale);
         int16_t * I = (int16_t *) I_Q;
         int16_t * K = (int16_t *) K_Q;
         for (int ic=0; ic<IC; ic++){
@@ -119,13 +118,13 @@ float convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, en
                     if (flag) continue;
                     int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                     int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                    ret += (float) (I[input_idx] * K[kernel_idx] / scale2);
+                    //printf("%f <- %d = %d * %d\n", ((float) (I[input_idx] * K[kernel_idx])) / scale2, I[input_idx] * K[kernel_idx], I[input_idx], K[kernel_idx]);
+                    ret += ((float) I[input_idx] * K[kernel_idx]) / scale2;
                 }
             }
         }
     }
     else if (q == INT8){
-        int8_t scale2 = (int8_t) (scale * scale);
         int8_t * I = (int8_t *) I_Q;
         int8_t * K = (int8_t *) K_Q;
         for (int ic=0; ic<IC; ic++){
@@ -135,8 +134,8 @@ float convolve_quantized(void * I_Q, void * K_Q, int n, int h, int w, int oc, en
                     if (flag) continue;
                     int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                     int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                    printf("%f <- %d = %d * %d\n", (float) (I[input_idx] * K[kernel_idx] / scale2), I[input_idx] * K[kernel_idx], I[input_idx], K[kernel_idx]);
-                    ret += (float) (I[input_idx] * K[kernel_idx] / scale2);
+                    //printf("%f <- %d = %d * %d\n", ((float) (I[input_idx] * K[kernel_idx])) / scale2, I[input_idx] * K[kernel_idx], I[input_idx], K[kernel_idx]);
+                    ret += ((float) I[input_idx] * K[kernel_idx]) / scale2;
                 }
             }
         }
@@ -166,19 +165,27 @@ int main(int argc, char **argv){
     qbits = atoi(argv[3]);
     enum qenum q;
     int qsize = 0;
+    float scale;
     if (qbits == 32) {
         q = INT32;
         qsize = sizeof(int32_t);
+        scale = 1e4;
+        assert (INT32_MAX >= (scale * scale));
     } else if (qbits == 16) {
         q = INT16;
         qsize = sizeof(int16_t);
+        scale = 1e2;
+        assert (INT16_MAX >= (scale * scale));
     } else if (qbits == 8) {
         q = INT8;
         qsize = sizeof(int8_t);
+        scale = 1e1;
+        assert (INT8_MAX >= (scale * scale));
     } else {
         printf("main: quantization bit should be 32, 16 or 8, got %d\n", qbits);
         exit(-1);
     }
+    float scale2 = scale * scale;
 
     // reading metadata
     int isize[4];
@@ -228,22 +235,6 @@ int main(int argc, char **argv){
     PW_H = (KW + 1)/2;
     PW_L = KW - PW_H;
 
-    // determine scaling factor
-    float scale;
-    if (q == INT32) {
-        scale = 1e4;
-        assert (INT32_MAX >= (scale * scale));
-    }
-    if (q == INT16) {
-        scale = 1e2;
-        assert (INT16_MAX >= (scale * scale));
-    }
-    if (q == INT8) {
-        scale = 1e1;
-        assert (INT8_MAX >= (scale * scale));
-    }
-   
-
     // quantization
     #ifdef DEBUG
     printf("main: quantization bit %d\n", qbits);
@@ -267,7 +258,7 @@ int main(int argc, char **argv){
                 for (int oc=0; oc<OC; oc++){
                     // convolution for a single output pixel
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                    O[output_idx] = convolve_quantized(I_Q, K_Q, n, h, w, oc, q, scale);
+                    O[output_idx] = convolve_quantized(I_Q, K_Q, n, h, w, oc, q, scale2);
                     //if (oc==0) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
                 }
             }
@@ -291,7 +282,7 @@ int main(int argc, char **argv){
             for (int w=0; w<W; w++){
                 for (int oc=0; oc<OC; oc++){
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                    float x = convolve_quantized(I_Q, K_Q, n, h, w, oc, q, scale);
+                    float x = convolve_quantized(I_Q, K_Q, n, h, w, oc, q, scale2);
                     float y = convolve(I, K, n, h, w, oc);
                     acc += (x - y)*(x - y);
                     if (ymax<y) ymax = y;
