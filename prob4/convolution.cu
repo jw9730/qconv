@@ -163,18 +163,12 @@ int main(int argc, char **argv){
 
 
 
-    ///////////////////////////////////////////main routine///////////////////////////////////////////
+    ///////////////////////////////////////////device setup///////////////////////////////////////////
     // compute padding (TensorFlow pads more on higher index)
     PH_H = (KH + 1)/2;
     PH_L = KH - PH_H;
     PW_H = (KW + 1)/2;
     PW_L = KW - PW_H;
-    #ifdef DEBUG
-    printf("main: compute convolution into output @ %p\n", O);
-    #endif
-    clock_t start, end;
-    start = clock();
-
     float *dev_I, *dev_K, *dev_O;
     // loop over outer dimensions, and compute dot product in chunks of size 512
     // kernel function: convolution for a single sliding window
@@ -182,41 +176,28 @@ int main(int argc, char **argv){
     HANDLE_ERROR( cudaMalloc( (void**)&dev_I, N * H * W * C * sizeof(float) ) );
     HANDLE_ERROR( cudaMalloc( (void**)&dev_K, H * W * IC * OC * sizeof(float) ) );
     HANDLE_ERROR( cudaMalloc( (void**)&dev_O, N * H * W * OC * sizeof(float) ) );
-    printf("1\n");
     // copy the arrays to the GPU
     HANDLE_ERROR( cudaMemcpy( dev_I, I, N * H * W * C * sizeof(float), cudaMemcpyHostToDevice ) );
     HANDLE_ERROR( cudaMemcpy( dev_K, K, KH * KW * IC * OC * sizeof(float), cudaMemcpyHostToDevice ) );
-    printf("2\n");
     // how to organize blocks?
     // maximizing data reuse and parallelism within a block
     int BLOCK_MEMSIZE = KH * KW * IC * sizeof(float);
     // input stationary
     // within a block, hold input and thread over output channels
     int BLOCKS_PER_PIXEL = ceil((float)(OC)/(float)(THREADS_PER_BLOCK));
-    printf("3\n");
+    ///////////////////////////////////////////device setup///////////////////////////////////////////
+
+
+
+    ///////////////////////////////////////////main routine///////////////////////////////////////////
+    #ifdef DEBUG
+    printf("main: compute convolution into output @ %p\n", O);
+    #endif
+    clock_t start, end;
+    start = clock();
     convolve_cuda<<<H*W*BLOCKS_PER_PIXEL,THREADS_PER_BLOCK,BLOCK_MEMSIZE>>>(dev_I, dev_K, dev_O, N, H, W, KH, KW, IC, OC, PH_L, PW_L);
     // copy the array back from the GPU to the CPU
     HANDLE_ERROR( cudaMemcpy( O, dev_O, N * H * W * OC * sizeof(float), cudaMemcpyDeviceToHost ) );
-    // cleanup
-    cudaFree(dev_I); cudaFree(dev_K); cudaFree(dev_O);
-    printf("4\n");
-
-
-
-    // compute convolution (scalar operations)
-    for (int n=0; n<N; n++){
-        for (int h=0; h<H; h++){
-            for (int w=0; w<W; w++){
-                for (int oc=0; oc<OC; oc++){
-                    // convolution for a single output pixel
-                    int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                    //printf("main: compute O[%d,%d,%d,%d], currently %0.3f\n", n, h, w, oc, O[output_idx]);
-                    O[output_idx] = convolve(I, K, n, h, w, oc);
-                    //printf("main: O[%d,%d,%d,%d] = %0.3f\n", n, h, w, oc, O[output_idx]);
-                }
-            }
-        }
-    }
     end = clock();
     float cpu_time_used = ((float) (end - start)) / CLOCKS_PER_SEC;
     printf("main: convolution elapsed time: %f\n", cpu_time_used);
@@ -263,6 +244,7 @@ int main(int argc, char **argv){
     fwrite(O, sizeof(float), N * H * W * OC, ofptr);
     fclose(ofptr);
     free(I); free(K); free(O);
+    cudaFree(dev_I); cudaFree(dev_K); cudaFree(dev_O);
     return 0;
     ///////////////////////////////////////////tidying up///////////////////////////////////////////
 }
