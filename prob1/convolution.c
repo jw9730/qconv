@@ -3,11 +3,9 @@
 #include <assert.h>
 #include <errno.h>
 #include <time.h>
+#define INDEX_ROW_MAJOR_4(i, j, k, l, I, J, K, L) ((l) + (L) * ((k) + (K) * ((j) + (J) * (i))))
 
 //#define DEBUG
-#define INDEX_ROW_MAJOR_2(i, j, I, J) ((j) + (J) * (i))
-#define INDEX_ROW_MAJOR_3(i, j, k, I, J, K) ((k) + (K) * ((j) + (J) * (i)))
-#define INDEX_ROW_MAJOR_4(i, j, k, l, I, J, K, L) ((l) + (L) * ((k) + (K) * ((j) + (J) * (i))))
 
 FILE * ifptr, * kfptr, * ofptr;
 int N, H, W, C;
@@ -20,17 +18,12 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
     int IH_L = h - PH_L;
     int IW_L = w - PW_L;
     float ret = 0;
-    int flag;
     int input_idx;
     int kernel_idx;
     for (int ic=0; ic<IC; ic++){
         for (int kh=0; kh<KH; kh++){
             for (int kw=0; kw<KW; kw++){
-                flag = (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W);
-                //printf("\t+= I[%d,%d/%d,%d/%d,%d/%d] * K[%d,%d,%d,%d], out-of-bounds: %d\n", n, IH_L+kh, H-1, IW_L+kw, W-1, ic, IC-1, kh, kw, oc, ic, flag);    
-                if (flag) {
-                    continue;
-                }
+                if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
                 input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                 kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
                 ret += I[input_idx] * K[kernel_idx];
@@ -41,6 +34,8 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
 }
 
 int main(int argc, char **argv){
+    printf("\n");
+    ///////////////////////////////////////////parse cmdline///////////////////////////////////////////
     #ifdef DEBUG
     printf("main: argc=%d\n", argc);
     #endif
@@ -58,7 +53,11 @@ int main(int argc, char **argv){
         printf("invalid kernel file\n");
         exit(-1);
     }
+    ///////////////////////////////////////////parse cmdline///////////////////////////////////////////
 
+
+
+    ///////////////////////////////////////////read data///////////////////////////////////////////
     // reading metadata
     int isize[4];
     int ksize[4];
@@ -68,15 +67,13 @@ int main(int argc, char **argv){
     printf("main: (N, H, W, C) = (%d, %d, %d, %d)\n", isize[0], isize[1], isize[2], isize[3]);
     printf("main: (KH, KW, OC, IC) = (%d, %d, %d, %d)\n", ksize[0], ksize[1], ksize[2], ksize[3]);
     #endif
-
     N = isize[0]; H = isize[1]; W = isize[2]; C = isize[3];
     KH = ksize[0]; KW = ksize[1]; OC = ksize[2]; IC = ksize[3];
     assert(C == IC);
-
+    // reading data
     #ifdef DEBUG
     printf("main: read input and kernel file into memory\n");
     #endif
-    // allocate
     float * I, * K, * O;
     size_t align_bytes = sizeof(void *) * 2;
     assert(align_bytes % sizeof(float) == 0);
@@ -101,19 +98,21 @@ int main(int argc, char **argv){
     fread(K, sizeof(float), KH * KW * OC * IC, kfptr);
     fclose(ifptr);
     fclose(kfptr);
-
     // compute padding (TensorFlow pads more on higher index)
     PH_H = (KH + 1)/2;
     PH_L = KH - PH_H;
     PW_H = (KW + 1)/2;
     PW_L = KW - PW_H;
+    ///////////////////////////////////////////read data///////////////////////////////////////////
 
+
+
+    ///////////////////////////////////////////main routine///////////////////////////////////////////
     #ifdef DEBUG
     printf("main: compute convolution into output @ %p\n", O);
     #endif
     clock_t start, end;
     start = clock();
-    
     // compute convolution (scalar operations)
     for (int n=0; n<N; n++){
         for (int h=0; h<H; h++){
@@ -128,11 +127,14 @@ int main(int argc, char **argv){
             }
         }
     }
-
     end = clock();
-    float cpu_time_used = ((float) (end - start)) / CLOCKS_PER_SEC;
-    printf("main: convolution elapsed time: %f\n", cpu_time_used);
+    float ctime = ((float) (end - start)) / CLOCKS_PER_SEC;
+    printf("convolution %fs\n", ctime);
+    ///////////////////////////////////////////main routine///////////////////////////////////////////
 
+
+
+    ///////////////////////////////////////////tidying up///////////////////////////////////////////
     // make output file
     #ifdef DEBUG
     printf("main: flush output to file\n");
@@ -145,4 +147,5 @@ int main(int argc, char **argv){
     fclose(ofptr);
     free(I); free(K); free(O);
     return 0;
+    ///////////////////////////////////////////tidying up///////////////////////////////////////////
 }

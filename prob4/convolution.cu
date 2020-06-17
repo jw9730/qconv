@@ -17,7 +17,7 @@ static void HandleError(cudaError_t err, const char *file, int line)
     }
 }
 
-#define DEBUG
+//#define DEBUG
 #define DO_NRMSE
 
 FILE * ifptr, * kfptr, * ofptr;
@@ -96,6 +96,7 @@ __global__ void convolve_cuda(float *I, float *K, float *O, int N, int H, int W,
     O[INDEX_ROW_MAJOR_4(n,h,w,ofs+tid, N,H,W,OC)] = acc;
 }
 int main(int argc, char **argv){
+    printf("\n");
     ///////////////////////////////////////////parse cmdline///////////////////////////////////////////
     #ifdef DEBUG
     printf("main: argc=%d\n", argc);
@@ -159,17 +160,17 @@ int main(int argc, char **argv){
     fread(K, sizeof(float), KH * KW * OC * IC, kfptr);
     fclose(ifptr);
     fclose(kfptr);
-    ///////////////////////////////////////////read data///////////////////////////////////////////
-
-
-
-    ///////////////////////////////////////////device setup///////////////////////////////////////////
     // compute padding (TensorFlow pads more on higher index)
     PH_H = (KH + 1)/2;
     PH_L = KH - PH_H;
     PW_H = (KW + 1)/2;
     PW_L = KW - PW_H;
     float *dev_I, *dev_K, *dev_O;
+    ///////////////////////////////////////////read data///////////////////////////////////////////
+
+
+
+    ///////////////////////////////////////////device setup///////////////////////////////////////////
     // loop over outer dimensions, and compute dot product in chunks of size 512
     // kernel function: convolution for a single sliding window
     // allocate the memory on the GPU
@@ -199,8 +200,8 @@ int main(int argc, char **argv){
     // copy the array back from the GPU to the CPU
     HANDLE_ERROR( cudaMemcpy( O, dev_O, N * H * W * OC * sizeof(float), cudaMemcpyDeviceToHost ) );
     end = clock();
-    float cpu_time_used = ((float) (end - start)) / CLOCKS_PER_SEC;
-    printf("main: convolution elapsed time: %f\n", cpu_time_used);
+    float ctime = ((float) (end - start)) / CLOCKS_PER_SEC;
+    printf("convolution %fs\n", ctime);
     ///////////////////////////////////////////main routine///////////////////////////////////////////
 
 
@@ -226,7 +227,7 @@ int main(int argc, char **argv){
         }
     }
     float NRMSE = sqrt(acc)/(ymax-ymin);
-    printf("main: NRMSE=%.20f\n", NRMSE);
+    printf("NRMSE=%.20f\n", NRMSE);
     #endif
     ///////////////////////////////////////////precision analysis///////////////////////////////////////////
 
