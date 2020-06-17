@@ -100,7 +100,6 @@ float convolve_quantized8(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 if (flag) continue;
                 int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                 int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                //printf("%f <- %d = %d * %d\n", ((float) (I[input_idx] * K[kernel_idx])) / scale2, I[input_idx] * K[kernel_idx], I[input_idx], K[kernel_idx]);
                 ret += ((float) (I[input_idx] * K[kernel_idx]));
             }
         }
@@ -122,7 +121,6 @@ float convolve_quantized16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 if (flag) continue;
                 int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                 int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                //printf("%f <- %d = %d * %d\n", ((float) (I[input_idx] * K[kernel_idx])) / scale2, I[input_idx] * K[kernel_idx], I[input_idx], K[kernel_idx]);
                 ret += ((float) (I[input_idx] * K[kernel_idx]));
             }
         }
@@ -144,7 +142,6 @@ float convolve_quantized32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 if (flag) continue;
                 int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                 int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                //printf("%f <- %d = %d * %d\n", ((float) (I[input_idx] * K[kernel_idx])) / scale2, I[input_idx] * K[kernel_idx], I[input_idx], K[kernel_idx]);
                 ret += ((float) (I[input_idx] * K[kernel_idx]));
             }
         }
@@ -274,7 +271,7 @@ int main(int argc, char **argv){
                     // convolution for a single output pixel
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
                     O[output_idx] = qconv(I_Q, K_Q, n, h, w, oc) / scale2;
-                    //if (oc==0) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
+                    if (oc==0) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
                 }
             }
         }
