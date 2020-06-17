@@ -12,7 +12,7 @@
 
 // compile flags
 //#define DEBUG
-#define DO_NRMSE
+//#define DO_NRMSE
 //#define OF_CLAMP
 
 int qbits;
@@ -116,7 +116,7 @@ float convolve_quantized32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 ret += v;
                 #endif
                 #ifndef OF_CLAMP
-                ret += I[input_idx] * K[kernel_idx];
+                ret += I[input_idx] * K[kernel_idx]; // implicit typecasting
                 #endif
             }
         }
@@ -149,7 +149,7 @@ float convolve_quantized16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 ret += v;
                 #endif
                 #ifndef OF_CLAMP
-                ret += I[input_idx] * K[kernel_idx];
+                ret += I[input_idx] * K[kernel_idx]; // implicit typecasting
                 #endif
             }
         }
@@ -182,7 +182,7 @@ float convolve_quantized8(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 else ret += v;
                 #endif
                 #ifndef OF_CLAMP
-                ret += I[input_idx] * K[kernel_idx];
+                ret += I[input_idx] * K[kernel_idx]; // implicit typecasting
                 #endif
             }
         }
