@@ -34,6 +34,7 @@ struct t_arg{
     float (* qconv) (void *, void *, int, int, int, int);
     int offset;
     int num_pixels;
+    float scale2;
 };
 
 void conv_func(void * aux){
@@ -44,16 +45,17 @@ void conv_func(void * aux){
     float (* qconv) (void *, void *, int, int, int, int) = t_arg->qconv;
     int offset = t_arg->offset;
     int num_pixels = t_arg->num_pixels;
+    float scale2 = t_arg->scale2;
     // parse input pixels and perform convolution
     for (int i=0; i<num_pixels; i++){
-        int idx = offset + i;
-        int oc = idx % (N*H*W);
-        int w = idx / OC % (N*H);
-        int h = idx / OC / W % N;
-        int n = idx / OC / W / H;
-        printf("%d -> %d, %d, %d, %d\n", n, h, w, oc);
-        exit(-1);
-        O[idx] += qconv(I_Q, K_Q, n, h, w, oc);
+        int output_idx = offset + i;
+        int n = output_idx / (H * W * OC);
+        int h = (output_idx - n * (H * W * OC)) / (W * OC);
+        int w = (output_idx - n * (H * W * OC) - h * (W * OC)) / OC;
+        int oc = (output_idx - n * (H * W * OC) - h * (W * OC) - w * OC);
+        assert(output_idx == INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC));
+        //printf("%d\t-> %d/%d, %d/%d, %d/%d, %d/%d\n", output_idx, n, N-1, h, H-1, w, W-1, oc, OC-1);
+        O[output_idx] = qconv(I_Q, K_Q, n, h, w, oc) / scale2;
     }
 }
 
@@ -384,17 +386,11 @@ int main(int argc, char **argv){
     int num_thread = N*H*W*OC/pix_per_thread;
     pthread_t tid[MAX_THREADS];
     struct t_arg t_args[MAX_THREADS];
-    printf("main: number of pixels %d, %d threads each with %d pixels will run\n", N*H*W*OC, pix_per_thread, num_thread);
+    printf("main: number of pixels %d, %d threads each with %d pixels will run\n", N*H*W*OC, num_thread, pix_per_thread);
     ///////////////////////////////////////////setup threading///////////////////////////////////////////
 
-struct t_arg{
-    void * I_Q;
-    void * K_Q;
-    void * O;
-    float (* qconv) (void *, void *, int, int, int, int);
-    int offset;
-    int num_pixels;
-};
+
+
     ///////////////////////////////////////////main routine///////////////////////////////////////////
     // compute padding (TensorFlow pads more on higher index)
     PH_H = (KH + 1)/2;
@@ -412,14 +408,17 @@ struct t_arg{
         t_arg->I_Q = I_Q;
         t_arg->K_Q = K_Q;
         t_arg->O = O;
+        t_arg->qconv = qconv;
         t_arg->offset = pix_per_thread * t;
         t_arg->num_pixels = (residue < pix_per_thread) ? residue : pix_per_thread;
-        pthread_create(tid[t], NULL, conv_func, t_arg);
+        t_arg->scale2 = scale2;
+        pthread_create(tid + t, NULL, conv_func, t_arg);
         residue -= pix_per_thread; t++; t_arg++;
     }
     for (int i=0; i<t; i++){
         pthread_join(tid[i], NULL);
     }
+    /*
     for (int n=0; n<N; n++){
         for (int h=0; h<H; h++){
             for (int w=0; w<W; w++){
@@ -432,6 +431,7 @@ struct t_arg{
             }
         }
     }
+    */
     end = clock();
     float cpu_time_used = ((float) (end - start)) / CLOCKS_PER_SEC;
     printf("main: convolution elapsed time: %f\n", cpu_time_used);
@@ -450,7 +450,7 @@ struct t_arg{
             for (int w=0; w<W; w++){
                 for (int oc=0; oc<OC; oc++){
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                    float x = qconv(I_Q, K_Q, n, h, w, oc) / scale2;
+                    float x = O[output_idx];
                     float y = convolve(I, K, n, h, w, oc);
                     acc += (x - y)*(x - y) / (N*H*W*OC);
                     if (ymax<y) ymax = y;
