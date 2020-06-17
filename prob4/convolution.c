@@ -242,7 +242,7 @@ int main(int argc, char **argv){
         }
     }
     float NRMSE = sqrt(acc)/(ymax-ymin);
-    printf("main: (%s, S=%.3f) -> NRMSE=%.20f\n", argv[3], scale, NRMSE);
+    printf("main: NRMSE=%.20f\n", NRMSE);
     #endif
     ///////////////////////////////////////////precision analysis///////////////////////////////////////////
 
