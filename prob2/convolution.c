@@ -105,7 +105,7 @@ int64_t convolve_q32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             }
         }
     }
-    return ret;
+    return (int64_t) ret;
 }
 int64_t convolve_q16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
     int16_t * I = (int16_t *) I_Q;
@@ -174,8 +174,8 @@ int main(int argc, char **argv){
     if (qbits == 32) {
         q = INT32;
         qsize = sizeof(int32_t);
-        iscale = (1<<18);
-        kscale = (1<<18) * 5e2;
+        iscale = (1<<12);
+        kscale = (1<<12) * 5e2;
         qconv = &convolve_q32;
     } else if (qbits == 16) {
         q = INT16;
