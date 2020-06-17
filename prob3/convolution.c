@@ -18,8 +18,8 @@ typedef enum qenum{
 } DATATYPE;
 
 // compile flags
-#define DEBUG
-//#define DO_NRMSE
+//#define DEBUG
+#define DO_NRMSE
 //#define PRECISION
 
 FILE * ifptr, * kfptr, * ofptr;
@@ -47,13 +47,16 @@ void conv_func(void * aux){
     int num_pixels = t_arg->num_pixels;
     float scale2 = t_arg->scale2;
     // parse input pixels and perform convolution
+    int c1 = (H * W * OC);
+    int c2 = (W * OC);
+    int c3 = (OC);
     for (int i=0; i<num_pixels; i++){
         int output_idx = offset + i;
-        int n = output_idx / (H * W * OC);
-        int h = (output_idx - n * (H * W * OC)) / (W * OC);
-        int w = (output_idx - n * (H * W * OC) - h * (W * OC)) / OC;
-        int oc = (output_idx - n * (H * W * OC) - h * (W * OC) - w * OC);
-        assert(output_idx == INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC));
+        int n = output_idx / c1;
+        int h = output_idx % c1 / c2;
+        int w = output_idx % c1 % c2 / c3;
+        int oc = output_idx % c1 % c2 % c3;
+        //assert(output_idx == INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC));
         //printf("%d\t-> %d/%d, %d/%d, %d/%d, %d/%d\n", output_idx, n, N-1, h, H-1, w, W-1, oc, OC-1);
         O[output_idx] = qconv(I_Q, K_Q, n, h, w, oc) / scale2;
     }
@@ -356,7 +359,6 @@ int main(int argc, char **argv){
     fclose(ifptr);
     fclose(kfptr);
     ///////////////////////////////////////////read data///////////////////////////////////////////
-
 
 
 
