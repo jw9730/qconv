@@ -19,7 +19,6 @@ typedef enum qenum{
 
 //#define DEBUG
 #define DO_NRMSE
-//#define PRECISION
 
 FILE * ifptr, * kfptr, * ofptr;
 int N, H, W, C;
@@ -29,8 +28,9 @@ int PH_L, PH_H, PW_L, PW_H;
 struct t_arg{
     void * I_Q;
     void * K_Q;
-    float * O;
-    float (* qconv) (void *, void *, int, int, int, int);
+    void * O_Q;
+    float (* qconvfp) (void *, void *, int, int, int, int);
+    int64_t (* qconvint) (void *, void *, int, int, int, int);
     int offset;
     int num_pixels;
     float scale2;
@@ -40,8 +40,7 @@ void conv_func(void * aux){
     struct t_arg * t_arg = (struct t_arg *) aux;
     void * I_Q = t_arg->I_Q;
     void * K_Q = t_arg->K_Q;
-    float * O = t_arg->O;
-    float (* qconv) (void *, void *, int, int, int, int) = t_arg->qconv;
+    void * O_Q = t_arg->O_Q;
     int offset = t_arg->offset;
     int num_pixels = t_arg->num_pixels;
     float scale2 = t_arg->scale2;
@@ -49,16 +48,35 @@ void conv_func(void * aux){
     int c1 = (H * W * OC);
     int c2 = (W * OC);
     int c3 = (OC);
-    for (int i=0; i<num_pixels; i++){
-        int output_idx = offset + i;
-        int n = output_idx/c1;
-        int h = output_idx%c1/c2;
-        int w = output_idx%c1%c2/c3;
-        int oc = output_idx%c1%c2%c3;
-        //assert(output_idx == INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC));
-        //printf("%d\t-> %d/%d, %d/%d, %d/%d, %d/%d\n", output_idx, n, N-1, h, H-1, w, W-1, oc, OC-1);
-        O[output_idx] = qconv(I_Q, K_Q, n, h, w, oc) / scale2;
+    if (t_arg->qconvfp != NULL){
+        float (* qconv) (void *, void *, int, int, int, int) = t_arg->qconvfp;
+        float * O = (float *) O_Q;
+        for (int i=0; i<num_pixels; i++){
+            int idx = offset + i;
+            int n = idx/c1;
+            int h = idx%c1/c2;
+            int w = idx%c2/c3;
+            int oc = idx%c3;
+            assert(idx == INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC));
+            //printf("%d\t-> %d/%d, %d/%d, %d/%d, %d/%d\n", idx, n, N-1, h, H-1, w, W-1, oc, OC-1);
+            O[idx] = qconv(I_Q, K_Q, n, h, w, oc);
+        }
     }
+    else {
+        int64_t (* qconv) (void *, void *, int, int, int, int) = t_arg->qconvint;
+        int64_t * O = (int64_t *) O_Q;
+        for (int i=0; i<num_pixels; i++){
+            int idx = offset + i;
+            int n = idx/c1;
+            int h = idx%c1/c2;
+            int w = idx%c2/c3;
+            int oc = idx%c3;
+            assert(idx == INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC));
+            //printf("%d\t-> %d/%d, %d/%d, %d/%d, %d/%d\n", idx, n, N-1, h, H-1, w, W-1, oc, OC-1);
+            O[idx] = qconv(I_Q, K_Q, n, h, w, oc);
+        }
+    }
+
 }
 
 void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
@@ -92,6 +110,10 @@ void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
         }
     }
     return Q;
+}
+void quantize_restore(float * O, void * O_Q, int size, float scale2){
+    int64_t * O_int = (int64_t *) O_Q;
+    for (int i=0; i<size; i++) O[i] = ((float) O_int[i]) / scale2;
 }
 
 float convolve(float * I, float * K, int n, int h, int w, int oc){
@@ -150,18 +172,18 @@ float convolve_avx_fp32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
     for (int k=0; k<8; k++) ret += ((float *)&acc)[k];
     return ret;
 }
-float convolve_avx_int32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
+int64_t convolve_avx_int32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
     int32_t * I = (int32_t *) I_Q;
     int32_t * K = (int32_t *) K_Q;
     int IH_L = h - PH_L;
     int IW_L = w - PW_L;
-    float ret = 0;
+    int64_t ret = 0;
     // parallelize multiplication with avx
     // I: row major, (N, H, W, IC)
     // K: row major, (KH, KW, OC, IC)
     // O: row major, (N, H, W, OC)
     // avx vectorization dimension: IC
-    __m256 acc = _mm256_setzero_ps();
+    __m256i acc = (__m256i) _mm256_setzero_ps();
     for (int kh=0; kh<KH; kh++){
         for (int kw=0; kw<KW; kw++){
             if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
@@ -172,7 +194,13 @@ float convolve_avx_int32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             for (int chunk=0; chunk<IC/8; chunk++){
                 __m256i vx = _mm256_loadu_si256((__m256i *)I_p);
                 __m256i vy = _mm256_loadu_si256((__m256i *)K_p);
-                acc = _mm256_add_ps(acc, _mm256_cvtepi32_ps(_mm256_mullo_epi32(vx, vy)));
+                // expand to 64-bits (for precision)
+                __m256i xl = _mm256_cvtepi32_epi64(_mm_loadu_si128((__m128i *)&vx));
+                __m256i xh = _mm256_cvtepi32_epi64(_mm_loadu_si128(((__m128i *)&vx)+1));
+                __m256i yl = _mm256_cvtepi32_epi64(_mm_loadu_si128((__m128i *)&vy));
+                __m256i yh = _mm256_cvtepi32_epi64(_mm_loadu_si128(((__m128i *)&vy)+1));
+                // compute product
+                acc = _mm256_add_epi64(acc, _mm256_add_epi64(_mm256_mul_epi32(xl, yl), _mm256_mul_epi32(xh, yh)));
                 ic += 8; residue -= 8; I_p += 8; K_p += 8;
             }
             // handle boundary
@@ -180,24 +208,30 @@ float convolve_avx_int32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             __m256i vy = (__m256i) _mm256_setzero_ps();
             memcpy(&vx, I_p, sizeof(int32_t) * residue);
             memcpy(&vy, K_p, sizeof(int32_t) * residue);
-            acc = _mm256_add_ps(acc, _mm256_cvtepi32_ps(_mm256_mullo_epi32(vx, vy)));
+            // expand to 64-bits (for precision)
+            __m256i xl = _mm256_cvtepi32_epi64(_mm_loadu_si128((__m128i *)&vx));
+            __m256i xh = _mm256_cvtepi32_epi64(_mm_loadu_si128(((__m128i *)&vx)+1));
+            __m256i yl = _mm256_cvtepi32_epi64(_mm_loadu_si128((__m128i *)&vy));
+            __m256i yh = _mm256_cvtepi32_epi64(_mm_loadu_si128(((__m128i *)&vy)+1));
+            // compute product
+            acc = _mm256_add_epi64(acc, _mm256_add_epi64(_mm256_mul_epi32(xl, yl), _mm256_mul_epi32(xh, yh)));
         }
     }
-    for (int k=0; k<8; k++) ret += ((float *)&acc)[k];
+    for (int k=0; k<4; k++) ret += ((int64_t *)&acc)[k];
     return ret;
 }
-float convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
+int64_t convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
     int16_t * I = (int16_t *) I_Q;
     int16_t * K = (int16_t *) K_Q;
     int IH_L = h - PH_L;
     int IW_L = w - PW_L;
-    float ret = 0;
+    int32_t ret = 0;
     // parallelize multiplication with avx
     // I: row major, (N, H, W, IC)
     // K: row major, (KH, KW, OC, IC)
     // O: row major, (N, H, W, OC)
     // avx vectorization dimension: IC
-    __m256 acc = _mm256_setzero_ps();
+    __m256i acc = (__m256i)_mm256_setzero_ps();
     for (int kh=0; kh<KH; kh++){
         for (int kw=0; kw<KW; kw++){
             if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
@@ -208,25 +242,13 @@ float convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             for (int chunk=0; chunk<IC/16; chunk++){
                 __m256i vx = _mm256_loadu_si256((__m256i *)I_p);
                 __m256i vy = _mm256_loadu_si256((__m256i *)K_p);
-                #ifndef PRECISION
-                __m256i vo = _mm256_mullo_epi16(vx, vy);
-                // converting to 32-bit fp
-                __m256 lo_f = _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vo)));
-                __m256 hi_f = _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vo)+1)));
-                // cast to float and accumulate
-                acc = _mm256_add_ps(acc, _mm256_add_ps(lo_f, hi_f));
-                #endif
-                #ifdef PRECISION
-                // expand to two 32-bits (for precision)
-                __m128i xl = _mm_loadu_si128((__m128i *)&vx);
-                __m128i xh = _mm_loadu_si128(((__m128i *)&vx)+1);
-                __m128i yl = _mm_loadu_si128((__m128i *)&vy);
-                __m128i yh = _mm_loadu_si128(((__m128i *)&vy)+1);
+                // expand to 32-bits (for precision)
+                __m256i xl = _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vx));
+                __m256i xh = _mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vx)+1));
+                __m256i yl = _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vy));
+                __m256i yh = _mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vy)+1));
                 // compute product
-                __m256i vo_l = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(xl), _mm256_cvtepi16_epi32(yl));
-                __m256i vo_h = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(xh), _mm256_cvtepi16_epi32(yh));
-                acc = _mm256_add_ps(acc, _mm256_add_ps(_mm256_cvtepi32_ps(vo_h), _mm256_cvtepi32_ps(vo_l)));
-                #endif
+                acc = _mm256_add_epi32(acc, _mm256_add_epi32(_mm256_mullo_epi32(xl, yl), _mm256_mullo_epi32(xh, yh)));
                 ic += 16; residue -= 16; I_p += 16; K_p += 16;
             }
             // handle boundary
@@ -234,29 +256,17 @@ float convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             __m256i vy = (__m256i) _mm256_setzero_ps();
             memcpy(&vx, I_p, sizeof(int16_t) * residue);
             memcpy(&vy, K_p, sizeof(int16_t) * residue);
-            #ifndef PRECISION
-            __m256i vo = _mm256_mullo_epi16(vx, vy);
-            // converting to 32-bit fp
-            __m256 lo_f = _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vo)));
-            __m256 hi_f = _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vo)+1)));
-            // cast to float and accumulate
-            acc = _mm256_add_ps(acc, _mm256_add_ps(lo_f, hi_f));
-            #endif
-            #ifdef PRECISION
-            // expand to two 32-bits (for precision)
-            __m128i xl = _mm_loadu_si128((__m128i *)&vx);
-            __m128i xh = _mm_loadu_si128(((__m128i *)&vx)+1);
-            __m128i yl = _mm_loadu_si128((__m128i *)&vy);
-            __m128i yh = _mm_loadu_si128(((__m128i *)&vy)+1);
+            // expand to 32-bits (for precision)
+            __m256i xl = _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vx));
+            __m256i xh = _mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vx)+1));
+            __m256i yl = _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vy));
+            __m256i yh = _mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vy)+1));
             // compute product
-            __m256i vo_l = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(xl), _mm256_cvtepi16_epi32(yl));
-            __m256i vo_h = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(xh), _mm256_cvtepi16_epi32(yh));
-            acc = _mm256_add_ps(acc, _mm256_add_ps(_mm256_cvtepi32_ps(vo_h), _mm256_cvtepi32_ps(vo_l)));
-            #endif
+            acc = _mm256_add_epi32(acc, _mm256_add_epi32(_mm256_mullo_epi32(xl, yl), _mm256_mullo_epi32(xh, yh)));
         }
     }
-    for (int k=0; k<8; k++) ret += ((float *)&acc)[k];
-    return ret;
+    for (int k=0; k<8; k++) ret += ((int32_t *)&acc)[k];
+    return (int64_t) ret;
 }
 
 
@@ -284,33 +294,38 @@ int main(int argc, char **argv){
     char str1[10] = "FP32";
     char str2[10] = "INT32";
     char str3[10] = "INT16";
-    float (* qconv) (void *, void *, int, int, int, int) = NULL;
+    float (* qconvfp) (void *, void *, int, int, int, int) = NULL;
+    int64_t (* qconvint) (void *, void *, int, int, int, int) = NULL;
     enum qenum q;
     int qbits = 0;
     int qsize = 0;
-    float scale = 0;
+    float iscale, kscale;
     if (strcmp(argv[3], str1) == 0){
         q = FP32;
+        qbits = 0;
         qsize = sizeof(float);
-        qconv = &convolve_avx_fp32;
-        scale = 1;
+        qconvfp = &convolve_avx_fp32;
+        iscale = 1;
+        kscale = 1;
     } else if (strcmp(argv[3], str2) == 0){
         q = INT32;
         qbits = 32;
         qsize = sizeof(int32_t);
-        scale = 1<<13;
-        qconv = &convolve_avx_int32;
+        iscale = (1<<9);
+        kscale = (1<<9) * 5e2;
+        qconvint = &convolve_avx_int32;
     } else if (strcmp(argv[3], str3) == 0){
         q = INT16;
         qbits = 16;
         qsize = sizeof(int16_t);
-        scale = 1<<8;
-        qconv = &convolve_avx_int16;
+        iscale = (1<<7);
+        kscale = (1<<7) * 5e2;
+        qconvint = &convolve_avx_int16;
     } else {
         printf("invalid argument\n");
         exit(-1);
     }
-    float scale2 = scale * scale;
+    float scale2 = iscale * kscale;
     ///////////////////////////////////////////parse cmdline///////////////////////////////////////////
 
 
@@ -357,6 +372,11 @@ int main(int argc, char **argv){
     fread(K, sizeof(float), KH * KW * OC * IC, kfptr);
     fclose(ifptr);
     fclose(kfptr);
+    // compute padding (TensorFlow pads more on higher index)
+    PH_H = (KH + 1)/2;
+    PH_L = KH - PH_H;
+    PW_H = (KW + 1)/2;
+    PW_L = KW - PW_H;
     ///////////////////////////////////////////read data///////////////////////////////////////////
 
 
@@ -367,14 +387,24 @@ int main(int argc, char **argv){
     #endif
     clock_t start, end;
     start = clock();
-    void * I_Q, * K_Q;
+    void * I_Q, * K_Q, * O_Q;
     if (qbits > 0){
-        I_Q = quantize(I, q, qsize, scale, N * H * W * C);
-        K_Q = quantize(K, q, qsize, scale, KH * KW * OC * IC);
-    }
-    else{
+        I_Q = quantize(I, q, qsize, iscale, N * H * W * C);
+        K_Q = quantize(K, q, qsize, kscale, KH * KW * OC * IC);
+        if ((rc = posix_memalign((void **)&O_Q, ALIGN_BYTES, N * H * W * OC * sizeof(int64_t))) != 0){
+            printf("main: output memory allocation failure\n");
+            exit(-1);
+        }
+    } else if (qbits == 0){
         I_Q = I;
         K_Q = K;
+        if ((rc = posix_memalign((void **)&O_Q, ALIGN_BYTES, N * H * W * OC * sizeof(float))) != 0){
+            printf("main: output memory allocation failure\n");
+            exit(-1);
+        }
+    } else {
+        printf("main: invalid quantization option\n");
+        exit(-1);
     }
     end = clock();
     float qtime = ((float) (end - start)) / CLOCKS_PER_SEC;
@@ -395,11 +425,6 @@ int main(int argc, char **argv){
 
 
     ///////////////////////////////////////////main routine///////////////////////////////////////////
-    // compute padding (TensorFlow pads more on higher index)
-    PH_H = (KH + 1)/2;
-    PH_L = KH - PH_H;
-    PW_H = (KW + 1)/2;
-    PW_L = KW - PW_H;
     #ifdef DEBUG
     printf("main: compute convolution into output @ %p\n", O);
     #endif
@@ -410,8 +435,9 @@ int main(int argc, char **argv){
     while(residue>0){
         t_arg->I_Q = I_Q;
         t_arg->K_Q = K_Q;
-        t_arg->O = O;
-        t_arg->qconv = qconv;
+        t_arg->O_Q = O_Q;
+        t_arg->qconvfp = qconvfp;
+        t_arg->qconvint = qconvint;
         t_arg->offset = pix_per_thread * t;
         t_arg->num_pixels = (residue < pix_per_thread) ? residue : pix_per_thread;
         t_arg->scale2 = scale2;
@@ -421,24 +447,20 @@ int main(int argc, char **argv){
     for (int i=0; i<t; i++){
         pthread_join(tid[i], NULL);
     }
-    /*
-    for (int n=0; n<N; n++){
-        for (int h=0; h<H; h++){
-            for (int w=0; w<W; w++){
-                for (int oc=0; oc<OC; oc++){
-                    // convolution for a single output pixel
-                    int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                    O[output_idx] = qconv(I_Q, K_Q, n, h, w, oc) / scale2;
-                    //if (oc==0 && h==H/2) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
-                }
-            }
-        }
-    }
-    */
     end = clock();
-    float cpu_time_used = ((float) (end - start)) / CLOCKS_PER_SEC;
-    printf("main: convolution elapsed time: %f\n", cpu_time_used);
+    float ctime = ((float) (end - start)) / CLOCKS_PER_SEC;
     ///////////////////////////////////////////main routine///////////////////////////////////////////
+
+
+
+    ///////////////////////////////////////////postprocessing///////////////////////////////////////////
+    start = clock();
+    if (qbits == 0) memcpy(O, O_Q, N*H*W*OC*sizeof(float));
+    else quantize_restore(O, O_Q, N*H*W*OC, scale2);
+    end = clock();
+    qtime += ((float) (end - start)) / CLOCKS_PER_SEC;
+    printf("%s convolution %fs, overhead %fs\n", argv[3], ctime, qtime);
+    ///////////////////////////////////////////postprocessing///////////////////////////////////////////
 
 
 
@@ -463,7 +485,7 @@ int main(int argc, char **argv){
         }
     }
     float NRMSE = sqrt(acc)/(ymax-ymin);
-    printf("main: (%s, S=%.3f) -> NRMSE=%.20f\n", argv[3], scale, NRMSE);
+    printf("NRMSE=%.20f\n", NRMSE);
     #endif
     ///////////////////////////////////////////precision analysis///////////////////////////////////////////
 
