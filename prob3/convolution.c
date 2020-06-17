@@ -173,6 +173,14 @@ float convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             for (int chunk=0; chunk<IC/16; chunk++){
                 __m256i vx = _mm256_loadu_si256((__m256i *)I_p);
                 __m256i vy = _mm256_loadu_si256((__m256i *)K_p);
+                #ifndef PRECISION
+                __m256i vo = _mm256_mullo_epi16(vx, vy);
+                // converting to 32-bit fp
+                __m256 lo_f = _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vo)));
+                __m256 hi_f = _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vo)+1)));
+                // cast to float and accumulate
+                acc = _mm256_add_ps(acc, _mm256_add_ps(lo_f, hi_f));
+                #endif
                 #ifdef PRECISION
                 // expand to two 32-bits (for precision)
                 __m128i xl = _mm_loadu_si128((__m128i *)&vx);
@@ -184,14 +192,6 @@ float convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 __m256i vo_h = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(xh), _mm256_cvtepi16_epi32(yh));
                 acc = _mm256_add_ps(acc, _mm256_add_ps(_mm256_cvtepi32_ps(vo_h), _mm256_cvtepi32_ps(vo_l)));
                 #endif
-                #ifndef PRECISION
-                __m256i vo = _mm256_mullo_epi16(vx, vy);
-                // converting to 32-bit fp
-                __m256i lo_32 = _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vo));
-                __m256i hi_32 = _mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vo)+1));
-                // cast to float and accumulate
-                acc = _mm256_add_ps(acc, _mm256_add_ps(_mm256_cvtepi32_ps(lo_32), _mm256_cvtepi32_ps(hi_32)));
-                #endif
                 ic += 16; residue -= 16; I_p += 16; K_p += 16;
             }
             // handle boundary
@@ -199,6 +199,14 @@ float convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             __m256i vy = (__m256i) _mm256_setzero_ps();
             memcpy(&vx, I_p, sizeof(int16_t) * residue);
             memcpy(&vy, K_p, sizeof(int16_t) * residue);
+            #ifndef PRECISION
+            __m256i vo = _mm256_mullo_epi16(vx, vy);
+            // converting to 32-bit fp
+            __m256 lo_f = _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vo)));
+            __m256 hi_f = _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vo)+1)));
+            // cast to float and accumulate
+            acc = _mm256_add_ps(acc, _mm256_add_ps(lo_f, hi_f));
+            #endif
             #ifdef PRECISION
             // expand to two 32-bits (for precision)
             __m128i xl = _mm_loadu_si128((__m128i *)&vx);
@@ -209,14 +217,6 @@ float convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             __m256i vo_l = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(xl), _mm256_cvtepi16_epi32(yl));
             __m256i vo_h = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(xh), _mm256_cvtepi16_epi32(yh));
             acc = _mm256_add_ps(acc, _mm256_add_ps(_mm256_cvtepi32_ps(vo_h), _mm256_cvtepi32_ps(vo_l)));
-            #endif
-            #ifndef PRECISION
-            __m256i vo = _mm256_mullo_epi16(vx, vy);
-            // converting to 32-bit fp
-            __m256i lo_32 = _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vo));
-            __m256i hi_32 = _mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vo)+1));
-            // cast to float and accumulate
-            acc = _mm256_add_ps(acc, _mm256_add_ps(_mm256_cvtepi32_ps(lo_32), _mm256_cvtepi32_ps(hi_32)));
             #endif
         }
     }
