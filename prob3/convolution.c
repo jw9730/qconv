@@ -18,8 +18,8 @@ typedef enum qenum{
 } DATATYPE;
 
 // compile flags
-//#define DEBUG
-#define DO_NRMSE
+#define DEBUG
+//#define DO_NRMSE
 //#define PRECISION
 
 FILE * ifptr, * kfptr, * ofptr;
