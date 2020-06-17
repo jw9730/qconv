@@ -85,15 +85,14 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
     }
     return ret;
 }
-
 float convolve_quantized8(void * I_Q, void * K_Q, int n, int h, int w, int oc, float scale2){
     // convolve
+    int8_t * I = (int8_t *) I_Q;
+    int8_t * K = (int8_t *) K_Q;
     int IH_L = h - PH_L;
     int IW_L = w - PW_L;
     int flag;
     float ret = 0;
-    int8_t * I = (int8_t *) I_Q;
-    int8_t * K = (int8_t *) K_Q;
     for (int ic=0; ic<IC; ic++){
         for (int kh=0; kh<KH; kh++){
             for (int kw=0; kw<KW; kw++){
@@ -110,12 +109,12 @@ float convolve_quantized8(void * I_Q, void * K_Q, int n, int h, int w, int oc, f
 }
 float convolve_quantized16(void * I_Q, void * K_Q, int n, int h, int w, int oc, float scale2){
     // convolve
+    int16_t * I = (int16_t *) I_Q;
+    int16_t * K = (int16_t *) K_Q;
     int IH_L = h - PH_L;
     int IW_L = w - PW_L;
     int flag;
     float ret = 0;
-    int16_t * I = (int16_t *) I_Q;
-    int16_t * K = (int16_t *) K_Q;
     for (int ic=0; ic<IC; ic++){
         for (int kh=0; kh<KH; kh++){
             for (int kw=0; kw<KW; kw++){
@@ -132,12 +131,12 @@ float convolve_quantized16(void * I_Q, void * K_Q, int n, int h, int w, int oc, 
 }
 float convolve_quantized32(void * I_Q, void * K_Q, int n, int h, int w, int oc, float scale2){
     // convolve
+    int32_t * I = (int32_t *) I_Q;
+    int32_t * K = (int32_t *) K_Q;
     int IH_L = h - PH_L;
     int IW_L = w - PW_L;
     int flag;
     float ret = 0;
-    int32_t * I = (int32_t *) I_Q;
-    int32_t * K = (int32_t *) K_Q;
     for (int ic=0; ic<IC; ic++){
         for (int kh=0; kh<KH; kh++){
             for (int kw=0; kw<KW; kw++){
@@ -181,27 +180,27 @@ int main(int argc, char **argv){
     if (qbits == 32) {
         q = INT32;
         qsize = sizeof(int32_t);
-        scale = 1e4;
+        scale = 1<<13;
         assert (INT32_MAX >= (scale * scale));
         qconv = &convolve_quantized32;
 
     } else if (qbits == 16) {
         q = INT16;
         qsize = sizeof(int16_t);
-        scale = 1e2;
+        scale = 1<<7;
         assert (INT16_MAX >= (scale * scale));
         qconv = &convolve_quantized16;
     } else if (qbits == 8) {
         q = INT8;
         qsize = sizeof(int8_t);
-        scale = 1e1;
+        scale = 1;
         assert (INT8_MAX >= (scale * scale));
         qconv = &convolve_quantized8;
     } else {
         printf("main: quantization bit should be 32, 16 or 8, got %d\n", qbits);
         exit(-1);
     }
-    float scale2 = scale * scale;
+    int scale2 = scale * scale;
 
     // reading metadata
     int isize[4];
