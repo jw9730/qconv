@@ -38,6 +38,7 @@ void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
     if (q == INT32){
         for (int i=0; i<num_elem; i++){
             float val = S[i] * scale;
+            // clamp overflowing values
             if (((int64_t) val) > INT32_MAX) ((int32_t *) Q)[i] = INT32_MAX;
             else if (((int64_t) val) < INT32_MIN) ((int32_t *) Q)[i] = INT32_MIN;
             else ((int32_t *) Q)[i] = ((int32_t) val);
@@ -47,6 +48,7 @@ void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
     else if (q == INT16){
         for (int i=0; i<num_elem; i++){
             float val = S[i] * scale;
+            // clamp overflowing values
             if (((int64_t) val) > INT16_MAX) ((int16_t *) Q)[i] = INT16_MAX;
             else if (((int64_t) val) < INT16_MIN) ((int16_t *) Q)[i] = INT16_MIN;
             else ((int16_t *) Q)[i] = ((int16_t) val);
@@ -56,6 +58,7 @@ void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
     else if (q == INT8){
         for (int i=0; i<num_elem; i++){
             float val = S[i] * scale;
+            // clamp overflowing values
             if (((int64_t) val) > INT8_MAX) ((int8_t *) Q)[i] = INT8_MAX;
             else if (((int64_t) val) < INT8_MIN) ((int8_t *) Q)[i] = INT8_MIN;
             else ((int8_t *) Q)[i] = ((int8_t) val);
@@ -107,8 +110,8 @@ float convolve_quantized32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                     if ((a > 0 && b > 0) || (a < 0 && b < 0)) v = INT32_MAX;
                     else v = INT32_MIN;
                 }
-                ret += ((float) v);*/
-                ret += ((float) (a * b));
+                ret += v;*/
+                ret += a * b;
             }
         }
     }
@@ -136,8 +139,8 @@ float convolve_quantized16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                     if ((a > 0 && b > 0) || (a < 0 && b < 0)) v = INT16_MAX;
                     else v = INT16_MIN;
                 }
-                ret += ((float) v);*/
-                ret += ((float) (a * b));
+                ret += v;*/
+                ret += a * b;
             }
         }
     }
@@ -165,8 +168,8 @@ float convolve_quantized8(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                     if ((a > 0 && b > 0) || (a < 0 && b < 0)) ret += (float) INT8_MAX;
                     else ret += (float) INT8_MIN;
                 }
-                else ret += ((float) v);*/
-                ret += ((float) (a * b));
+                else ret += v;*/
+                ret += a * b;
             }
         }
     }
