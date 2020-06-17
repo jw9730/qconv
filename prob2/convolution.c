@@ -298,16 +298,16 @@ int main(int argc, char **argv){
             for (int w=0; w<W; w++){
                 for (int oc=0; oc<OC; oc++){
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                    float x = qconv(I_Q, K_Q, n, h, w, oc, q, scale2);
+                    float x = qconv(I_Q, K_Q, n, h, w, oc, scale2);
                     float y = convolve(I, K, n, h, w, oc);
-                    acc += (x - y)*(x - y);
+                    acc += (x - y)*(x - y) / (N*H*W*OC);
                     if (ymax<y) ymax = y;
                     if (ymin>y) ymin = y;
                 }
             }
         }
     }
-    float NRMSE = sqrt(acc / (N*H*W*OC))/(ymax-ymin);
+    float NRMSE = sqrt(acc)/(ymax-ymin);
     printf("main: (INT%2.0d, S=%.3f) -> NRMSE=%.20f\n", qbits, scale, NRMSE);
     #endif
     ///////////////////////////////////////////precision analysis///////////////////////////////////////////
