@@ -100,19 +100,21 @@ float convolve_avx_fp32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             int residue = IC;
             input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
             kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
+            float * I_p = I + input_idx;
+            float * K_p = K + kernel_idx;
             for (int chunk=0; chunk<IC/8; chunk++){
                 printf("%f, %f\n", I[input_idx], K[kernel_idx]);
-                __m256 vx = _mm256_load_ps((float *)&I[input_idx]);
-                __m256 vy = _mm256_load_ps((float *)&K[kernel_idx]);
+                __m256 vx = _mm256_load_ps(I_p);
+                __m256 vy = _mm256_load_ps(K_p);
                 __m256 vo = _mm256_mul_ps(vx, vy);
                 acc = _mm256_add_ps(acc, vo);
-                ic += 8; residue -= 8; input_idx += 8; kernel_idx += 8;
+                ic += 8; residue -= 8; I_p += 8; K_p += 8;
             }
             // handle boundary
             __m256 vx = _mm256_setzero_ps();
             __m256 vy = _mm256_setzero_ps();
-            memcpy(&vx, &I[input_idx], sizeof(float) * residue);
-            memcpy(&vy, &K[kernel_idx], sizeof(float) * residue);
+            memcpy(&vx, I_p, sizeof(float) * residue);
+            memcpy(&vy, K_p, sizeof(float) * residue);
             __m256 vo = _mm256_mul_ps(vx, vy);
             acc = _mm256_add_ps(acc, vo);
         }
