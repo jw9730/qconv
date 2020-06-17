@@ -48,7 +48,7 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
 
 __global__ void convolve_cuda(float *I, float *K, float *O, int N, int H, int W, int KH, int KW, int IC, int OC, int PH_L, int PW_L){
     // input stationary
-    int BLOCKS_PER_PIXEL = ceil(float(OC)/float(THREADS_PER_BLOCK));
+    int BLOCKS_PER_PIXEL = ceil((float)(OC)/(float)(THREADS_PER_BLOCK));
     int bid = blockIdx.x;
     int tid = threadIdx.x;
     int cid = bid % BLOCKS_PER_PIXEL; // channel block index (within pixel)
@@ -65,7 +65,7 @@ __global__ void convolve_cuda(float *I, float *K, float *O, int N, int H, int W,
     // this process could serve as bottleneck, load distribution is critical
     // distribute indices across threads
     int shm_size = KH * KW * IC;
-    int load_per_thread = ceil(float(shm_size)/float(THREADS_PER_BLOCK));
+    int load_per_thread = ceil((float)(shm_size)/(float)(THREADS_PER_BLOCK));
     int l = load_per_thread * tid;
     int u = load_per_thread * (tid + 1);
     if (l < shm_size) {
@@ -191,7 +191,7 @@ int main(int argc, char **argv){
     int BLOCK_MEMSIZE = KH * KW * IC * sizeof(float);
     // input stationary
     // within a block, hold input and thread over output channels
-    int BLOCKS_PER_PIXEL = ceil(float(OC)/float(THREADS_PER_BLOCK));
+    int BLOCKS_PER_PIXEL = ceil((float)(OC)/(float)(THREADS_PER_BLOCK));
     convolve_cuda<<<H*W*BLOCKS_PER_PIXEL,THREADS_PER_BLOCK,BLOCK_MEMSIZE>>>(dev_I, dev_K, dev_O, N, H, W, KH, KW, IC, OC, PH_L, PW_L);
     // copy the array back from the GPU to the CPU
     HANDLE_ERROR( cudaMemcpy( O, dev_O, N * H * W * OC * sizeof(float), cudaMemcpyDeviceToHost ) );
