@@ -14,7 +14,7 @@ typedef enum qenum{
 } DATATYPE;
 
 //#define DEBUG
-//#define STAT // show data statistics?
+#define STAT // show data statistics?
 #define DO_NRMSE // compute NRMSE? (runtime measurement will be turned off)
 //#define OF_CLAMP // clamp overflowing values? (2x runtime)
 
@@ -174,8 +174,8 @@ int main(int argc, char **argv){
     if (qbits == 32) {
         q = INT32;
         qsize = sizeof(int32_t);
-        iscale = (1<<10);
-        kscale = (1<<10) * 5e2;
+        iscale = (1<<12);
+        kscale = (1<<12) * 5e2;
         qconv = &convolve_q32;
     } else if (qbits == 16) {
         q = INT16;
