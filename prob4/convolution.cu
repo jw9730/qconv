@@ -73,8 +73,8 @@ __global__ void convolve_cuda(float *I, float *K, float *O, int N, int H, int W,
     // parse idx (KH, KW, IC)
     if (l < shm_size) {
         for (int idx=l; idx<((u<shm_size)?u:shm_size); idx++){
-            int kh = idx/(KW*C);
-            int kw = idx%(KW*C)/IC;
+            int kh = idx/(KW*IC);
+            int kw = idx%(KW*IC)/IC;
             int ic = idx%IC;
             if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
             M[INDEX_ROW_MAJOR_3(kh,kw,ic, KH,KW,IC)] = I[INDEX_ROW_MAJOR_4(n,h+kh,w+kw,ic, N,H,W,IC)];
