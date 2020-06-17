@@ -171,8 +171,10 @@ float convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             int16_t * I_p = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
             int16_t * K_p = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
             for (int chunk=0; chunk<IC/16; chunk++){
-                __m256i vx = _mm256_loadu_si256((__m256i *)I_p);
-                __m256i vy = _mm256_loadu_si256((__m256i *)K_p);
+                __m256i vx = (__m256i) _mm256_setzero_ps();
+                __m256i vy = (__m256i) _mm256_setzero_ps();
+                memcpy(&vx, I_p, sizeof(__m256i));
+                memcpy(&vy, K_p, sizeof(__m256i));
                 #ifdef PRECISION
                 // expand to two 32-bits (for precision)
                 __m128i xl = _mm_loadu_si128((__m128i *)&vx);
