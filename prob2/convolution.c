@@ -10,6 +10,7 @@
 #define INDEX_ROW_MAJOR_4(i, j, k, l, I, J, K, L) ((l) + (L) * ((k) + (K) * ((j) + (J) * (i))))
 #define ALIGN_BYTES (sizeof(void *) * 2)
 
+// compile flags
 //#define DEBUG
 //#define DO_NRMSE
 //#define OF_CLAMP
@@ -104,9 +105,9 @@ float convolve_quantized32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 if (flag) continue;
                 int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                 int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
+                #ifdef OF_CLAMP
                 int32_t a = I[input_idx];
                 int32_t b = K[kernel_idx];
-                #ifdef OF_CLAMP
                 int32_t v = a * b;
                 if ((a != 0) && ((v / a) != b)) {
                     if ((a > 0 && b > 0) || (a < 0 && b < 0)) v = INT32_MAX;
@@ -115,7 +116,7 @@ float convolve_quantized32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 ret += v;
                 #endif
                 #ifndef OF_CLAMP
-                ret += a * b;
+                ret += I[input_idx] * K[kernel_idx];
                 #endif
             }
         }
@@ -137,9 +138,9 @@ float convolve_quantized16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 if (flag) continue;
                 int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                 int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
+                #ifdef OF_CLAMP
                 int16_t a = I[input_idx];
                 int16_t b = K[kernel_idx];
-                #ifdef OF_CLAMP
                 int16_t v = a * b;
                 if ((a != 0) && ((v / a) != b)) {
                     if ((a > 0 && b > 0) || (a < 0 && b < 0)) v = INT16_MAX;
@@ -148,7 +149,7 @@ float convolve_quantized16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 ret += v;
                 #endif
                 #ifndef OF_CLAMP
-                ret += a * b;
+                ret += I[input_idx] * K[kernel_idx];
                 #endif
             }
         }
@@ -170,9 +171,9 @@ float convolve_quantized8(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 if (flag) continue;
                 int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
                 int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
+                #ifdef OF_CLAMP
                 int8_t a = I[input_idx];
                 int8_t b = K[kernel_idx];
-                #ifdef OF_CLAMP
                 int8_t v = a * b;
                 if ((a != 0) && ((v / a) != b)) {
                     if ((a > 0 && b > 0) || (a < 0 && b < 0)) ret += (float) INT8_MAX;
@@ -181,7 +182,7 @@ float convolve_quantized8(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 else ret += v;
                 #endif
                 #ifndef OF_CLAMP
-                ret += a * b;
+                ret += I[input_idx] * K[kernel_idx];
                 #endif
             }
         }
