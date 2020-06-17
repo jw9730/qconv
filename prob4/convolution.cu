@@ -175,7 +175,6 @@ int main(int argc, char **argv){
     clock_t start, end;
     start = clock();
 
-
     float *dev_I, *dev_K, *dev_O;
     // loop over outer dimensions, and compute dot product in chunks of size 512
     // kernel function: convolution for a single sliding window
@@ -192,6 +191,7 @@ int main(int argc, char **argv){
     // input stationary
     // within a block, hold input and thread over output channels
     int BLOCKS_PER_PIXEL = ceil((float)(OC)/(float)(THREADS_PER_BLOCK));
+    printf("start\n");
     convolve_cuda<<<H*W*BLOCKS_PER_PIXEL,THREADS_PER_BLOCK,BLOCK_MEMSIZE>>>(dev_I, dev_K, dev_O, N, H, W, KH, KW, IC, OC, PH_L, PW_L);
     // copy the array back from the GPU to the CPU
     HANDLE_ERROR( cudaMemcpy( O, dev_O, N * H * W * OC * sizeof(float), cudaMemcpyDeviceToHost ) );
