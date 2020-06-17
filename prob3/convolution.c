@@ -9,7 +9,7 @@
 #include <immintrin.h>
 #include <pthread.h>
 #define INDEX_ROW_MAJOR_4(i, j, k, l, I, J, K, L) ((l) + (L) * ((k) + (K) * ((j) + (J) * (i))))
-#define ALIGN_BYTES (sizeof(void *) * 4)
+#define ALIGN_BYTES (sizeof(void *) * 8)
 typedef enum qenum{
     FP32,
     INT32,
