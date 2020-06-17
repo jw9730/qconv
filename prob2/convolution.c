@@ -85,7 +85,7 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
     }
     return ret;
 }
-float convolve_quantized8(void * I_Q, void * K_Q, int n, int h, int w, int oc, float scale2){
+float convolve_quantized8(void * I_Q, void * K_Q, int n, int h, int w, int oc, int scale2){
     // convolve
     int8_t * I = (int8_t *) I_Q;
     int8_t * K = (int8_t *) K_Q;
@@ -107,7 +107,7 @@ float convolve_quantized8(void * I_Q, void * K_Q, int n, int h, int w, int oc, f
     }
     return ret;
 }
-float convolve_quantized16(void * I_Q, void * K_Q, int n, int h, int w, int oc, float scale2){
+float convolve_quantized16(void * I_Q, void * K_Q, int n, int h, int w, int oc, int scale2){
     // convolve
     int16_t * I = (int16_t *) I_Q;
     int16_t * K = (int16_t *) K_Q;
@@ -129,7 +129,7 @@ float convolve_quantized16(void * I_Q, void * K_Q, int n, int h, int w, int oc, 
     }
     return ret;
 }
-float convolve_quantized32(void * I_Q, void * K_Q, int n, int h, int w, int oc, float scale2){
+float convolve_quantized32(void * I_Q, void * K_Q, int n, int h, int w, int oc, int scale2){
     // convolve
     int32_t * I = (int32_t *) I_Q;
     int32_t * K = (int32_t *) K_Q;
@@ -176,7 +176,7 @@ int main(int argc, char **argv){
     enum qenum q;
     int qsize = 0;
     float scale;
-    float (* qconv) (void *, void *, int, int, int, int, float) = NULL;
+    float (* qconv) (void *, void *, int, int, int, int, int) = NULL;
     if (qbits == 32) {
         q = INT32;
         qsize = sizeof(int32_t);
