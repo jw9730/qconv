@@ -293,7 +293,8 @@ int main(int argc, char **argv){
             for (int w=0; w<W; w++){
                 for (int oc=0; oc<OC; oc++){
                     // convolution for a single output pixel
-                    O_Q[INDEX_ROW_MAJOR_4(n,h,w,oc, N,H,W,OC)] = qconv(I_Q, K_Q, n, h, w, oc);
+                    int output_idx = INDEX_ROW_MAJOR_4(n,h,w,oc, N,H,W,OC);
+                    O_Q[output_idx] = qconv(I_Q, K_Q, n, h, w, oc);
                     if (oc==0 && h==H/2) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((float)O_Q[output_idx])/scale2, convolve(I, K, n, h, w, oc));
                 }
             }
