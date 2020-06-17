@@ -11,7 +11,8 @@
 #define ALIGN_BYTES (sizeof(void *) * 2)
 
 //#define DEBUG
-#define DO_NRMSE
+//#define DO_NRMSE
+//#define OF_CLAMP
 
 int qbits;
 typedef enum qenum{
@@ -105,13 +106,17 @@ float convolve_quantized32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
                 int32_t a = I[input_idx];
                 int32_t b = K[kernel_idx];
-                /*int32_t v = a * b;
+                #ifdef OF_CLAMP
+                int32_t v = a * b;
                 if ((a != 0) && ((v / a) != b)) {
                     if ((a > 0 && b > 0) || (a < 0 && b < 0)) v = INT32_MAX;
                     else v = INT32_MIN;
                 }
-                ret += v;*/
+                ret += v;
+                #endif
+                #ifndef OF_CLAMP
                 ret += a * b;
+                #endif
             }
         }
     }
@@ -134,13 +139,17 @@ float convolve_quantized16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
                 int16_t a = I[input_idx];
                 int16_t b = K[kernel_idx];
-                /*int16_t v = a * b;
+                #ifdef OF_CLAMP
+                int16_t v = a * b;
                 if ((a != 0) && ((v / a) != b)) {
                     if ((a > 0 && b > 0) || (a < 0 && b < 0)) v = INT16_MAX;
                     else v = INT16_MIN;
                 }
-                ret += v;*/
+                ret += v;
+                #endif
+                #ifndef OF_CLAMP
                 ret += a * b;
+                #endif
             }
         }
     }
@@ -163,13 +172,17 @@ float convolve_quantized8(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
                 int8_t a = I[input_idx];
                 int8_t b = K[kernel_idx];
-                /*int8_t v = a * b;
+                #ifdef OF_CLAMP
+                int8_t v = a * b;
                 if ((a != 0) && ((v / a) != b)) {
                     if ((a > 0 && b > 0) || (a < 0 && b < 0)) ret += (float) INT8_MAX;
                     else ret += (float) INT8_MIN;
                 }
-                else ret += v;*/
+                else ret += v;
+                #endif
+                #ifndef OF_CLAMP
                 ret += a * b;
+                #endif
             }
         }
     }
@@ -295,7 +308,7 @@ int main(int argc, char **argv){
                     // convolution for a single output pixel
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
                     O[output_idx] = qconv(I_Q, K_Q, n, h, w, oc) / scale2;
-                    //if (oc==0) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
+                    //if (oc==0 && h==H/2) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
                 }
             }
         }
