@@ -11,7 +11,7 @@
 #define ALIGN_BYTES (sizeof(void *) * 2)
 
 //#define DEBUG
-#define DO_NRMSE
+//#define DO_NRMSE
 
 int qbits;
 typedef enum qenum{
