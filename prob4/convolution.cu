@@ -96,7 +96,6 @@ __global__ void convolve_cuda(float *I, float *K, float *O, int N, int H, int W,
     O[INDEX_ROW_MAJOR_4(n,h,w,ofs+tid, N,H,W,OC)] = acc;
 }
 int main(int argc, char **argv){
-    printf("\n");
     ///////////////////////////////////////////parse cmdline///////////////////////////////////////////
     #ifdef DEBUG
     printf("main: argc=%d\n", argc);
