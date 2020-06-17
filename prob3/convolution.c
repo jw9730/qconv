@@ -17,7 +17,6 @@ typedef enum qenum{
     INT16
 } DATATYPE;
 
-// compile flags
 //#define DEBUG
 #define DO_NRMSE
 //#define PRECISION
@@ -52,10 +51,10 @@ void conv_func(void * aux){
     int c3 = (OC);
     for (int i=0; i<num_pixels; i++){
         int output_idx = offset + i;
-        int n = output_idx / c1;
-        int h = output_idx % c1 / c2;
-        int w = output_idx % c1 % c2 / c3;
-        int oc = output_idx % c1 % c2 % c3;
+        int n = output_idx/c1;
+        int h = output_idx%c1/c2;
+        int w = output_idx%c1%c2/c3;
+        int oc = output_idx%c1%c2%c3;
         //assert(output_idx == INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC));
         //printf("%d\t-> %d/%d, %d/%d, %d/%d, %d/%d\n", output_idx, n, N-1, h, H-1, w, W-1, oc, OC-1);
         O[output_idx] = qconv(I_Q, K_Q, n, h, w, oc) / scale2;
@@ -388,7 +387,9 @@ int main(int argc, char **argv){
     int num_thread = N*H*W*OC/pix_per_thread;
     pthread_t tid[MAX_THREADS];
     struct t_arg t_args[MAX_THREADS];
+    #ifdef DEBUG
     printf("main: number of pixels %d, %d threads each with %d pixels will run\n", N*H*W*OC, num_thread, pix_per_thread);
+    #endif
     ///////////////////////////////////////////setup threading///////////////////////////////////////////
 
 
