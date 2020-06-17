@@ -70,14 +70,14 @@ __global__ void convolve_cuda(float *I, float *K, float *O, int N, int H, int W,
     int shm_per_t = ceil((float)(shm_size)/(float)(THREADS_PER_BLOCK));
     int l = shm_per_t * tid;
     int u = shm_per_t * (tid + 1);
-    // parse idx (KH, KW, C)
+    // parse idx (KH, KW, IC)
     if (l < shm_size) {
         for (int idx=l; idx<((u<shm_size)?u:shm_size); idx++){
             int kh = idx/(KW*C);
-            int kw = idx%(KW*C)/C;
-            int c = idx%C;
+            int kw = idx%(KW*C)/IC;
+            int ic = idx%IC;
             if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
-            M[INDEX_ROW_MAJOR_3(kh,kw,c, KH,KW,IC)] = I[INDEX_ROW_MAJOR_4(n,h+kh,w+kw,c, N,H,W,C)];
+            M[INDEX_ROW_MAJOR_3(kh,kw,ic, KH,KW,IC)] = I[INDEX_ROW_MAJOR_4(n,h+kh,w+kw,ic, N,H,W,IC)];
         }
     }
     // wait until data is ready
@@ -91,7 +91,7 @@ __global__ void convolve_cuda(float *I, float *K, float *O, int N, int H, int W,
     for (int kh=0; kh<KH; kh++){
         for (int kw=0; kw<KW; kw++){
             for (int ic=0; ic<IC; ic++){
-                acc += M[INDEX_ROW_MAJOR_4(n,kh,kw,ic, N,KH,KW,C)] * K[INDEX_ROW_MAJOR_4(kh,kw,ic,ofs+tid, KH,KW,IC,OC)];
+                acc += M[INDEX_ROW_MAJOR_4(n,kh,kw,ic, N,KH,KW,IC)] * K[INDEX_ROW_MAJOR_4(kh,kw,ic,ofs+tid, KH,KW,IC,OC)];
             }
         }
     }
