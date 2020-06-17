@@ -45,8 +45,6 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
     }
     return ret;
 }
-
-
 __global__ void convolve_cuda(float *I, float *K, float *O, int N, int H, int W, int KH, int KW, int IC, int OC, int PH_L, int PW_L){
     // input stationary
     int BLOCKS_PER_PIXEL = ceil((float)(OC)/(float)(THREADS_PER_BLOCK));
@@ -97,7 +95,6 @@ __global__ void convolve_cuda(float *I, float *K, float *O, int N, int H, int W,
     }
     O[INDEX_ROW_MAJOR_4(n,h,w,ofs+tid, N,H,W,OC)] = acc;
 }
-
 int main(int argc, char **argv){
     ///////////////////////////////////////////parse cmdline///////////////////////////////////////////
     #ifdef DEBUG
