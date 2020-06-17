@@ -69,7 +69,7 @@ __global__ void convolve_cuda(float *I, float *K, float *O, int N, int H, int W,
     int l = load_per_thread * tid;
     int u = load_per_thread * (tid + 1);
     if (l < shm_size) {
-        for (int idx=l; idx<((u<f)?u:f); idx++){
+        for (int idx=l; idx<((u<shm_size)?u:shm_size); idx++){
             int kh = idx/IC/KW;
             int kw = idx/IC%KW;
             int ic = idx%IC;
