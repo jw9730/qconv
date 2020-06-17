@@ -34,7 +34,6 @@ float convolve(float * I, float * K, int n, int h, int w, int oc){
 }
 
 int main(int argc, char **argv){
-    printf("\n");
     ///////////////////////////////////////////parse cmdline///////////////////////////////////////////
     #ifdef DEBUG
     printf("main: argc=%d\n", argc);
@@ -61,8 +60,15 @@ int main(int argc, char **argv){
     // reading metadata
     int isize[4];
     int ksize[4];
-    fread(isize, sizeof(int), 4, ifptr);
-    fread(ksize, sizeof(int), 4, kfptr);
+    size_t rsize;
+    if ((rsize = fread(isize, sizeof(int), 4, ifptr)) != 4 * sizeof(int)){
+        printf("main: read failure\n");
+        exit(-1);
+    }
+    if ((rsize = fread(ksize, sizeof(int), 4, kfptr)) != 4 * sizeof(int)){
+        printf("main: read failure\n");
+        exit(-1);
+    }
     #ifdef DEBUG
     printf("main: (N, H, W, C) = (%d, %d, %d, %d)\n", isize[0], isize[1], isize[2], isize[3]);
     printf("main: (KH, KW, OC, IC) = (%d, %d, %d, %d)\n", ksize[0], ksize[1], ksize[2], ksize[3]);
@@ -94,8 +100,15 @@ int main(int argc, char **argv){
     printf("main: I %p, K %p, O %p, align_bytes %lu, sizeof(float) %lu\n", I, K, O, align_bytes, sizeof(float));
     #endif
     // read file into memory
-    fread(I, sizeof(float), N * H * W * C, ifptr);
-    fread(K, sizeof(float), KH * KW * OC * IC, kfptr);
+    // read file into memory
+    if ((rsize = fread(I, sizeof(float), N * H * W * C, ifptr)) != N * H * W * C * sizeof(float)){
+        printf("main: read failure\n");
+        exit(-1);
+    }
+    if ((rsize = fread(K, sizeof(float), KH * KW * OC * IC, kfptr)) != KH * KW * OC * IC * sizeof(float)){
+        printf("main: read failure\n");
+        exit(-1);
+    }
     fclose(ifptr);
     fclose(kfptr);
     // compute padding (TensorFlow pads more on higher index)
@@ -143,7 +156,10 @@ int main(int argc, char **argv){
         printf("output file open failed\n");
         exit(-1);
     }
-    fwrite(O, sizeof(float), N * H * W * OC, ofptr);
+    if ((rsize = fwrite(O, sizeof(float), N * H * W * OC, ofptr)) !=  N * H * W * OC * sizeof(float)){
+        printf("main: write failure\n");
+        exit(-1);
+    }
     fclose(ofptr);
     free(I); free(K); free(O);
     return 0;
