@@ -61,11 +61,11 @@ int main(int argc, char **argv){
     int isize[4];
     int ksize[4];
     size_t rsize;
-    if ((rsize = fread(isize, sizeof(int), 4, ifptr)) != 4 * sizeof(int)){
+    if ((rsize = fread(isize, sizeof(int), 4, ifptr)) != 4){
         printf("main: read failure\n");
         exit(-1);
     }
-    if ((rsize = fread(ksize, sizeof(int), 4, kfptr)) != 4 * sizeof(int)){
+    if ((rsize = fread(ksize, sizeof(int), 4, kfptr)) != 4){
         printf("main: read failure\n");
         exit(-1);
     }
@@ -100,12 +100,11 @@ int main(int argc, char **argv){
     printf("main: I %p, K %p, O %p, align_bytes %lu, sizeof(float) %lu\n", I, K, O, align_bytes, sizeof(float));
     #endif
     // read file into memory
-    // read file into memory
-    if ((rsize = fread(I, sizeof(float), N * H * W * C, ifptr)) != N * H * W * C * sizeof(float)){
+    if ((rsize = fread(I, sizeof(float), N * H * W * C, ifptr)) != N * H * W * C){
         printf("main: read failure\n");
         exit(-1);
     }
-    if ((rsize = fread(K, sizeof(float), KH * KW * OC * IC, kfptr)) != KH * KW * OC * IC * sizeof(float)){
+    if ((rsize = fread(K, sizeof(float), KH * KW * OC * IC, kfptr)) != KH * KW * OC * IC){
         printf("main: read failure\n");
         exit(-1);
     }
@@ -156,7 +155,7 @@ int main(int argc, char **argv){
         printf("output file open failed\n");
         exit(-1);
     }
-    if ((rsize = fwrite(O, sizeof(float), N * H * W * OC, ofptr)) !=  N * H * W * OC * sizeof(float)){
+    if ((rsize = fwrite(O, sizeof(float), N * H * W * OC, ofptr)) !=  N * H * W * OC){
         printf("main: write failure\n");
         exit(-1);
     }
