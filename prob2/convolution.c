@@ -224,9 +224,19 @@ int main(int argc, char **argv){
 
     // determine scaling factor
     float scale;
-    if (q == INT32) scale = 1e4;
-    if (q == INT16) scale = 1e2;
-    if (q == INT8) scale = 1e1;
+    if (q == INT32) {
+        scale = 1e4;
+        assert (INT32_MAX >= (scale * scale));
+    }
+    if (q == INT16) {
+        scale = 1e2;
+        assert (INT16_MAX >= (scale * scale));
+    }
+    if (q == INT8) {
+        scale = 1e1;
+        assert (INT8_MAX >= (scale * scale));
+    }
+   
 
     // quantization
     #ifdef DEBUG
