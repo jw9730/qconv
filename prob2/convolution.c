@@ -12,7 +12,7 @@
 
 // compile flags
 //#define DEBUG
-//#define DO_NRMSE
+#define DO_NRMSE
 //#define OF_CLAMP
 
 int qbits;
