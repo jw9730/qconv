@@ -194,7 +194,6 @@ float convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 #endif
                 ic += 16; residue -= 16; I_p += 16; K_p += 16;
             }
-            printf("done2\n");
             // handle boundary
             __m256i vx = (__m256i) _mm256_setzero_ps();
             __m256i vy = (__m256i) _mm256_setzero_ps();
