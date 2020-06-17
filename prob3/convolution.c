@@ -9,7 +9,7 @@
 #include <immintrin.h>
 #include <pthread.h>
 #define INDEX_ROW_MAJOR_4(i, j, k, l, I, J, K, L) ((l) + (L) * ((k) + (K) * ((j) + (J) * (i))))
-#define ALIGN_BYTES (sizeof(void *) * 8)
+#define ALIGN_BYTES (sizeof(void *) * 2)
 typedef enum qenum{
     FP32,
     INT32,
@@ -173,6 +173,7 @@ float convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             for (int chunk=0; chunk<IC/16; chunk++){
                 __m256i vx = _mm256_loadu_si256((__m256i *)I_p);
                 __m256i vy = _mm256_loadu_si256((__m256i *)K_p);
+                printf("done\n");
                 #ifdef PRECISION
                 // expand to two 32-bits (for precision)
                 __m128i xl = _mm_loadu_si128((__m128i *)&vx);
@@ -194,6 +195,7 @@ float convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 #endif
                 ic += 16; residue -= 16; I_p += 16; K_p += 16;
             }
+            printf("done2\n");
             // handle boundary
             __m256i vx = (__m256i) _mm256_setzero_ps();
             __m256i vy = (__m256i) _mm256_setzero_ps();
