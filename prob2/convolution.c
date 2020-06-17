@@ -177,21 +177,26 @@ int main(int argc, char **argv){
     enum qenum q;
     int qsize = 0;
     float scale;
+    float (* qconv) (void *, void *, int, int, int, int, float) = NULL;
     if (qbits == 32) {
         q = INT32;
         qsize = sizeof(int32_t);
         scale = 1e4;
         assert (INT32_MAX >= (scale * scale));
+        qconv = &convolve_quantized32;
+
     } else if (qbits == 16) {
         q = INT16;
         qsize = sizeof(int16_t);
         scale = 1e2;
         assert (INT16_MAX >= (scale * scale));
+        qconv = &convolve_quantized16;
     } else if (qbits == 8) {
         q = INT8;
         qsize = sizeof(int8_t);
         scale = 1e1;
         assert (INT8_MAX >= (scale * scale));
+        qconv = &convolve_quantized8;
     } else {
         printf("main: quantization bit should be 32, 16 or 8, got %d\n", qbits);
         exit(-1);
@@ -263,44 +268,14 @@ int main(int argc, char **argv){
     #endif
     start = clock();
     // compute convolution (scalar operations)
-    if (q == INT32){
-        for (int n=0; n<N; n++){
-            for (int h=0; h<H; h++){
-                for (int w=0; w<W; w++){
-                    for (int oc=0; oc<OC; oc++){
-                        // convolution for a single output pixel
-                        int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                        O[output_idx] = convolve_quantized32(I_Q, K_Q, n, h, w, oc, scale2);
-                        //if (oc==0) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
-                    }
-                }
-            }
-        }
-    }
-    else if (q == INT16){
-        for (int n=0; n<N; n++){
-            for (int h=0; h<H; h++){
-                for (int w=0; w<W; w++){
-                    for (int oc=0; oc<OC; oc++){
-                        // convolution for a single output pixel
-                        int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                        O[output_idx] = convolve_quantized16(I_Q, K_Q, n, h, w, oc, scale2);
-                        //if (oc==0) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
-                    }
-                }
-            }
-        }
-    }
-    else if (q == INT8){
-        for (int n=0; n<N; n++){
-            for (int h=0; h<H; h++){
-                for (int w=0; w<W; w++){
-                    for (int oc=0; oc<OC; oc++){
-                        // convolution for a single output pixel
-                        int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                        O[output_idx] = convolve_quantized8(I_Q, K_Q, n, h, w, oc, scale2);
-                        //if (oc==0) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
-                    }
+    for (int n=0; n<N; n++){
+        for (int h=0; h<H; h++){
+            for (int w=0; w<W; w++){
+                for (int oc=0; oc<OC; oc++){
+                    // convolution for a single output pixel
+                    int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
+                    O[output_idx] = qconv(I_Q, K_Q, n, h, w, oc, scale2);
+                    //if (oc==0) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, O[output_idx], convolve(I, K, n, h, w, oc));
                 }
             }
         }
@@ -318,50 +293,16 @@ int main(int argc, char **argv){
     float ymax = -1e15;
     float ymin = 1e15;
     float acc = 0;
-    if (q == INT32){
-        for (int n=0; n<N; n++){
-            for (int h=0; h<H; h++){
-                for (int w=0; w<W; w++){
-                    for (int oc=0; oc<OC; oc++){
-                        int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                        float x = convolve_quantized32(I_Q, K_Q, n, h, w, oc, q, scale2);
-                        float y = convolve(I, K, n, h, w, oc);
-                        acc += (x - y)*(x - y);
-                        if (ymax<y) ymax = y;
-                        if (ymin>y) ymin = y;
-                    }
-                }
-            }
-        }
-    }
-    else if (q == INT16){
-        for (int n=0; n<N; n++){
-            for (int h=0; h<H; h++){
-                for (int w=0; w<W; w++){
-                    for (int oc=0; oc<OC; oc++){
-                        int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                        float x = convolve_quantized16(I_Q, K_Q, n, h, w, oc, q, scale2);
-                        float y = convolve(I, K, n, h, w, oc);
-                        acc += (x - y)*(x - y);
-                        if (ymax<y) ymax = y;
-                        if (ymin>y) ymin = y;
-                    }
-                }
-            }
-        }
-    }
-    else if (q == INT8){
-        for (int n=0; n<N; n++){
-            for (int h=0; h<H; h++){
-                for (int w=0; w<W; w++){
-                    for (int oc=0; oc<OC; oc++){
-                        int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
-                        float x = convolve_quantized8(I_Q, K_Q, n, h, w, oc, q, scale2);
-                        float y = convolve(I, K, n, h, w, oc);
-                        acc += (x - y)*(x - y);
-                        if (ymax<y) ymax = y;
-                        if (ymin>y) ymin = y;
-                    }
+    for (int n=0; n<N; n++){
+        for (int h=0; h<H; h++){
+            for (int w=0; w<W; w++){
+                for (int oc=0; oc<OC; oc++){
+                    int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
+                    float x = qconv(I_Q, K_Q, n, h, w, oc, q, scale2);
+                    float y = convolve(I, K, n, h, w, oc);
+                    acc += (x - y)*(x - y);
+                    if (ymax<y) ymax = y;
+                    if (ymin>y) ymin = y;
                 }
             }
         }
