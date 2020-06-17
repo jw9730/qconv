@@ -76,10 +76,8 @@ __global__ void convolve_cuda(float *I, float *K, float *O, int N, int H, int W,
             int kh = idx/(KW*IC);
             int kw = idx%(KW*IC)/IC;
             int ic = idx%IC;
-            if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W){
-                M[INDEX_ROW_MAJOR_3(kh,kw,ic, KH,KW,IC)] = 0;
-            }
-            M[INDEX_ROW_MAJOR_3(kh,kw,ic, KH,KW,IC)] = I[INDEX_ROW_MAJOR_4(n,h+kh,w+kw,ic, N,H,W,IC)];
+            if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
+            M[INDEX_ROW_MAJOR_3(kh,kw,ic, KH,KW,IC)] = I[INDEX_ROW_MAJOR_4(n,IH_L+kh,IW_L+kw,ic, N,H,W,IC)];
         }
     }
     // wait until data is ready
@@ -93,7 +91,7 @@ __global__ void convolve_cuda(float *I, float *K, float *O, int N, int H, int W,
     for (int kh=0; kh<KH; kh++){
         for (int kw=0; kw<KW; kw++){
             for (int ic=0; ic<IC; ic++){
-                acc += M[INDEX_ROW_MAJOR_4(n,kh,kw,ic, N,KH,KW,IC)] * K[INDEX_ROW_MAJOR_4(kh,kw,ic,ofs+tid, KH,KW,IC,OC)];
+                acc += M[INDEX_ROW_MAJOR_4(n,kh,kw,ic, N,KH,KW,IC)] * K[INDEX_ROW_MAJOR_4(kh,kw,ofs+tid,ic, KH,KW,OC,IC)];
             }
         }
     }
@@ -179,11 +177,11 @@ int main(int argc, char **argv){
     // kernel function: convolution for a single sliding window
     // allocate the memory on the GPU
     HANDLE_ERROR( cudaMalloc( (void**)&dev_I, N * H * W * C * sizeof(float) ) );
-    HANDLE_ERROR( cudaMalloc( (void**)&dev_K, H * W * IC * OC * sizeof(float) ) );
+    HANDLE_ERROR( cudaMalloc( (void**)&dev_K, H * W * OC * IC * sizeof(float) ) );
     HANDLE_ERROR( cudaMalloc( (void**)&dev_O, N * H * W * OC * sizeof(float) ) );
     // copy the arrays to the GPU
     HANDLE_ERROR( cudaMemcpy( dev_I, I, N * H * W * C * sizeof(float), cudaMemcpyHostToDevice ) );
-    HANDLE_ERROR( cudaMemcpy( dev_K, K, KH * KW * IC * OC * sizeof(float), cudaMemcpyHostToDevice ) );
+    HANDLE_ERROR( cudaMemcpy( dev_K, K, KH * KW * OC * IC * sizeof(float), cudaMemcpyHostToDevice ) );
     // how to organize blocks?
     // maximizing data reuse and parallelism within a block
     int BLOCK_MEMSIZE = KH * KW * IC * sizeof(float);
