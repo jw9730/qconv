@@ -17,7 +17,7 @@ static void HandleError(cudaError_t err, const char *file, int line)
     }
 }
 
-//#define DEBUG
+#define DEBUG
 #define DO_NRMSE
 
 FILE * ifptr, * kfptr, * ofptr;
@@ -179,24 +179,27 @@ int main(int argc, char **argv){
     // loop over outer dimensions, and compute dot product in chunks of size 512
     // kernel function: convolution for a single sliding window
     // allocate the memory on the GPU
-    printf("start\n");
-    HANDLE_ERROR( cudaMalloc( (void**)&dev_I, N * W * H * C * sizeof(float) ) );
-    HANDLE_ERROR( cudaMalloc( (void**)&dev_K, N * W * H * C * OC * sizeof(float) ) );
-    HANDLE_ERROR( cudaMalloc( (void**)&dev_O, N * W * H * C * sizeof(float) ) );
+    HANDLE_ERROR( cudaMalloc( (void**)&dev_I, N * H * W * C * sizeof(float) ) );
+    HANDLE_ERROR( cudaMalloc( (void**)&dev_K, H * W * IC * OC * sizeof(float) ) );
+    HANDLE_ERROR( cudaMalloc( (void**)&dev_O, N * H * W * OC * sizeof(float) ) );
+    printf("1\n");
     // copy the arrays to the GPU
-    HANDLE_ERROR( cudaMemcpy( dev_I, I, W * H * C * sizeof(float), cudaMemcpyHostToDevice ) );
-    HANDLE_ERROR( cudaMemcpy( dev_K, K, W * H * IC * OC * sizeof(float), cudaMemcpyHostToDevice ) );
+    HANDLE_ERROR( cudaMemcpy( dev_I, I, N * H * W * C * sizeof(float), cudaMemcpyHostToDevice ) );
+    HANDLE_ERROR( cudaMemcpy( dev_K, K, KH * KW * IC * OC * sizeof(float), cudaMemcpyHostToDevice ) );
+    printf("2\n");
     // how to organize blocks?
     // maximizing data reuse and parallelism within a block
     int BLOCK_MEMSIZE = KH * KW * IC * sizeof(float);
     // input stationary
     // within a block, hold input and thread over output channels
     int BLOCKS_PER_PIXEL = ceil((float)(OC)/(float)(THREADS_PER_BLOCK));
+    printf("3\n");
     convolve_cuda<<<H*W*BLOCKS_PER_PIXEL,THREADS_PER_BLOCK,BLOCK_MEMSIZE>>>(dev_I, dev_K, dev_O, N, H, W, KH, KW, IC, OC, PH_L, PW_L);
     // copy the array back from the GPU to the CPU
     HANDLE_ERROR( cudaMemcpy( O, dev_O, N * H * W * OC * sizeof(float), cudaMemcpyDeviceToHost ) );
     // cleanup
     cudaFree(dev_I); cudaFree(dev_K); cudaFree(dev_O);
+    printf("4\n");
 
 
 
