@@ -85,8 +85,6 @@ float convolve_avx_fp32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
     int IH_L = h - PH_L;
     int IW_L = w - PW_L;
     float ret = 0;
-    int input_idx;
-    int kernel_idx;
     // parallelize multiplication with avx
     // I: row major, (N, H, W, IC)
     // K: row major, (KH, KW, OC, IC)
@@ -98,15 +96,12 @@ float convolve_avx_fp32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
             int ic = 0;
             int residue = IC;
-            input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
-            kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-            float * I_p = I + input_idx;
-            float * K_p = K + kernel_idx;
+            float * I_p = I + INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
+            float * K_p = K + INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
             for (int chunk=0; chunk<IC/8; chunk++){
                 __m256 vx = _mm256_loadu_ps(I_p);
                 __m256 vy = _mm256_loadu_ps(K_p);
-                __m256 vo = _mm256_mul_ps(vx, vy);
-                acc = _mm256_add_ps(acc, vo);
+                acc = _mm256_add_ps(acc, _mm256_mul_ps(vx, vy));
                 ic += 8; residue -= 8; I_p += 8; K_p += 8;
             }
             // handle boundary
@@ -114,8 +109,7 @@ float convolve_avx_fp32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             __m256 vy = _mm256_setzero_ps();
             memcpy(&vx, I_p, sizeof(float) * residue);
             memcpy(&vy, K_p, sizeof(float) * residue);
-            __m256 vo = _mm256_mul_ps(vx, vy);
-            acc = _mm256_add_ps(acc, vo);
+            acc = _mm256_add_ps(acc, _mm256_mul_ps(vx, vy));
         }
     }
     for (int k=0; k<8; k++) ret += ((float *)&acc)[k];
@@ -127,8 +121,6 @@ float convolve_avx_int32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
     int IH_L = h - PH_L;
     int IW_L = w - PW_L;
     float ret = 0;
-    int input_idx;
-    int kernel_idx;
     // parallelize multiplication with avx
     // I: row major, (N, H, W, IC)
     // K: row major, (KH, KW, OC, IC)
@@ -140,22 +132,20 @@ float convolve_avx_int32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
             int ic = 0;
             int residue = IC;
-            input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
-            kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
+            int32_t * I_p = I + INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
+            int32_t * K_p = K + INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
             for (int chunk=0; chunk<IC/8; chunk++){
-                __m256i vx = _mm256_loadu_si256((__m256i *)&I[input_idx]);
-                __m256i vy = _mm256_loadu_si256((__m256i *)&K[kernel_idx]);
-                __m256i vo = _mm256_mullo_epi32(vx, vy);
-                acc = _mm256_add_ps(acc, _mm256_cvtepi32_ps(vo));
-                ic += 8; residue -= 8; input_idx += 8; kernel_idx += 8;
+                __m256i vx = _mm256_loadu_si256((__m256i *)I_p);
+                __m256i vy = _mm256_loadu_si256((__m256i *)K_p);
+                acc = _mm256_add_ps(acc, _mm256_cvtepi32_ps(_mm256_mullo_epi32(vx, vy)));
+                ic += 8; residue -= 8; I_p += 8; K_p += 8;
             }
             // handle boundary
             __m256i vx = (__m256i) _mm256_setzero_ps();
             __m256i vy = (__m256i) _mm256_setzero_ps();
-            memcpy(&vx, &I[input_idx], sizeof(int32_t) * residue);
-            memcpy(&vy, &K[kernel_idx], sizeof(int32_t) * residue);
-            __m256i vo = _mm256_mullo_epi32(vx, vy);
-            acc = _mm256_add_ps(acc, _mm256_cvtepi32_ps(vo));
+            memcpy(&vx, I_p, sizeof(int32_t) * residue);
+            memcpy(&vy, K_p, sizeof(int32_t) * residue);
+            acc = _mm256_add_ps(acc, _mm256_cvtepi32_ps(_mm256_mullo_epi32(vx, vy)));
         }
     }
     for (int k=0; k<8; k++) ret += ((float *)&acc)[k];
@@ -167,24 +157,22 @@ float convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
     int IH_L = h - PH_L;
     int IW_L = w - PW_L;
     float ret = 0;
-    int input_idx;
-    int kernel_idx;
     // parallelize multiplication with avx
     // I: row major, (N, H, W, IC)
     // K: row major, (KH, KW, OC, IC)
     // O: row major, (N, H, W, OC)
     // avx vectorization dimension: IC
+    __m256 acc = _mm256_setzero_ps();
     for (int kh=0; kh<KH; kh++){
         for (int kw=0; kw<KW; kw++){
             if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
-            __m256 acc = _mm256_setzero_ps();
             int ic = 0;
             int residue = IC;
-            int input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
-            int kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
+            int16_t * I_p = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
+            int16_t * K_p = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
             for (int chunk=0; chunk<IC/16; chunk++){
-                __m256i vx = _mm256_load_si256((__m256i *)&I[input_idx]);
-                __m256i vy = _mm256_load_si256((__m256i *)&K[kernel_idx]);
+                __m256i vx = _mm256_load_si256((__m256i *)I_p);
+                __m256i vy = _mm256_load_si256((__m256i *)K_p);
                 #ifdef PRECISION
                 // expand to two 32-bits (for precision)
                 __m128i xl = _mm_loadu_si128((__m128i *)&vx);
@@ -194,29 +182,23 @@ float convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
                 // compute product
                 __m256i vo_l = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(xl), _mm256_cvtepi16_epi32(yl));
                 __m256i vo_h = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(xh), _mm256_cvtepi16_epi32(yh));
-                __m256 lo_f = _mm256_cvtepi32_ps(vo_l);
-                __m256 hi_f = _mm256_cvtepi32_ps(vo_h);
-                acc = _mm256_add_ps(hi_f, _mm256_add_ps(acc, lo_f));
+                acc = _mm256_add_ps(acc, _mm256_add_ps(_mm256_cvtepi32_ps(vo_h), _mm256_cvtepi32_ps(vo_l)));
                 #endif
                 #ifndef PRECISION
                 __m256i vo = _mm256_mullo_epi16(vx, vy);
                 // converting to 32-bit fp
-                __m128i lo = _mm_loadu_si128((__m128i *)&vo);
-                __m128i hi = _mm_loadu_si128(((__m128i *)&vo)+1);
-                __m256i lo_32 = _mm256_cvtepi16_epi32(lo);
-                __m256i hi_32 = _mm256_cvtepi16_epi32(hi);
+                __m256i lo_32 = _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vo));
+                __m256i hi_32 = _mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vo)+1));
                 // cast to float and accumulate
-                __m256 lo_f = _mm256_cvtepi32_ps(lo_32);
-                __m256 hi_f = _mm256_cvtepi32_ps(hi_32);
-                acc = _mm256_add_ps(hi_f, _mm256_add_ps(acc, lo_f));
+                acc = _mm256_add_ps(acc, _mm256_add_ps(_mm256_cvtepi32_ps(lo_32), _mm256_cvtepi32_ps(hi_32)));
                 #endif
-                ic += 16; residue -= 16; input_idx += 16; kernel_idx += 16;
+                ic += 16; residue -= 16; I_p += 16; K_p += 16;
             }
             // handle boundary
             __m256i vx = (__m256i) _mm256_setzero_ps();
             __m256i vy = (__m256i) _mm256_setzero_ps();
-            memcpy(&vx, &I[input_idx], sizeof(int16_t) * residue);
-            memcpy(&vy, &K[kernel_idx], sizeof(int16_t) * residue);
+            memcpy(&vx, I_p, sizeof(int16_t) * residue);
+            memcpy(&vy, K_p, sizeof(int16_t) * residue);
             #ifdef PRECISION
             // expand to two 32-bits (for precision)
             __m128i xl = _mm_loadu_si128((__m128i *)&vx);
@@ -226,25 +208,19 @@ float convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             // compute product
             __m256i vo_l = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(xl), _mm256_cvtepi16_epi32(yl));
             __m256i vo_h = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(xh), _mm256_cvtepi16_epi32(yh));
-            __m256 lo_f = _mm256_cvtepi32_ps(vo_l);
-            __m256 hi_f = _mm256_cvtepi32_ps(vo_h);
-            acc = _mm256_add_ps(hi_f, _mm256_add_ps(acc, lo_f));
+            acc = _mm256_add_ps(acc, _mm256_add_ps(_mm256_cvtepi32_ps(vo_h), _mm256_cvtepi32_ps(vo_l)));
             #endif
             #ifndef PRECISION
             __m256i vo = _mm256_mullo_epi16(vx, vy);
             // converting to 32-bit fp
-            __m128i lo = _mm_loadu_si128((__m128i *)&vo);
-            __m128i hi = _mm_loadu_si128(((__m128i *)&vo)+1);
-            __m256i lo_32 = _mm256_cvtepi16_epi32(lo);
-            __m256i hi_32 = _mm256_cvtepi16_epi32(hi);
+            __m256i lo_32 = _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vo));
+            __m256i hi_32 = _mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vo)+1));
             // cast to float and accumulate
-            __m256 lo_f = _mm256_cvtepi32_ps(lo_32);
-            __m256 hi_f = _mm256_cvtepi32_ps(hi_32);
-            acc = _mm256_add_ps(hi_f, _mm256_add_ps(acc, lo_f));
+            acc = _mm256_add_ps(acc, _mm256_add_ps(_mm256_cvtepi32_ps(lo_32), _mm256_cvtepi32_ps(hi_32)));
             #endif
-            for (int k=0; k<8; k++) ret += ((float *)&acc)[k];
         }
     }
+    for (int k=0; k<8; k++) ret += ((float *)&acc)[k];
     return ret;
 }
 
