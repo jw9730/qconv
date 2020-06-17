@@ -103,9 +103,8 @@ float convolve_avx_fp32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             float * I_p = I + input_idx;
             float * K_p = K + kernel_idx;
             for (int chunk=0; chunk<IC/8; chunk++){
-                __m256 vx = _mm256_load_ps(I_p);
-                __m256 vy = _mm256_load_ps(K_p);
-                printf("done\n");
+                __m256 vx = _mm256_loadu_ps(I_p);
+                __m256 vy = _mm256_loadu_ps(K_p);
                 __m256 vo = _mm256_mul_ps(vx, vy);
                 acc = _mm256_add_ps(acc, vo);
                 ic += 8; residue -= 8; I_p += 8; K_p += 8;
@@ -144,8 +143,8 @@ float convolve_avx_int32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
             kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
             for (int chunk=0; chunk<IC/8; chunk++){
-                __m256i vx = _mm256_load_si256((__m256i *)&I[input_idx]);
-                __m256i vy = _mm256_load_si256((__m256i *)&K[kernel_idx]);
+                __m256i vx = _mm256_loadu_si256((__m256i *)&I[input_idx]);
+                __m256i vy = _mm256_loadu_si256((__m256i *)&K[kernel_idx]);
                 __m256i vo = _mm256_mullo_epi32(vx, vy);
                 acc = _mm256_add_ps(acc, _mm256_cvtepi32_ps(vo));
                 ic += 8; residue -= 8; input_idx += 8; kernel_idx += 8;
