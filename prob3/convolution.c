@@ -101,8 +101,9 @@ float convolve_avx_fp32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
             kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
             for (int chunk=0; chunk<IC/8; chunk++){
-                __m256 vx = _mm256_load_ps(&I[input_idx]);
-                __m256 vy = _mm256_load_ps(&K[kernel_idx]);
+                printf("%f, %f\n", I[input_idx], K[kernel_idx]);
+                __m256 vx = _mm256_load_ps((float *)&I[input_idx]);
+                __m256 vy = _mm256_load_ps((float *)&K[kernel_idx]);
                 __m256 vo = _mm256_mul_ps(vx, vy);
                 acc = _mm256_add_ps(acc, vo);
                 ic += 8; residue -= 8; input_idx += 8; kernel_idx += 8;
