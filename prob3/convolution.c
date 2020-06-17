@@ -103,9 +103,9 @@ float convolve_avx_fp32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
             float * I_p = I + input_idx;
             float * K_p = K + kernel_idx;
             for (int chunk=0; chunk<IC/8; chunk++){
-                printf("%f, %f\n", I[input_idx], K[kernel_idx]);
                 __m256 vx = _mm256_load_ps(I_p);
                 __m256 vy = _mm256_load_ps(K_p);
+                print("done\n");
                 __m256 vo = _mm256_mul_ps(vx, vy);
                 acc = _mm256_add_ps(acc, vo);
                 ic += 8; residue -= 8; I_p += 8; K_p += 8;
