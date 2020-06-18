@@ -53,5 +53,10 @@ do
     python3 ../test/test.py ./output_tensor.bin ../test/output_tensor.bin
     cd ..
     printf "prob4 done\n\n"
-
 done
+
+# cleanup
+rm -f ./test/output_tensor.bin
+rm -f ./prob1/output_tensor.bin
+rm -f ./prob2/output_tensor.bin
+rm -f ./prob3/output_tensor.bin
