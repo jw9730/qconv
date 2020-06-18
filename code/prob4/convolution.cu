@@ -10,6 +10,7 @@
 #define ALIGN_BYTES (sizeof(void *) * 2)
 #define THREADS_PER_BLOCK 512
 #define HANDLE_ERROR(err) (HandleError( err, __FILE__, __LINE__ ))
+
 static void HandleError(cudaError_t err, const char *file, int line)
 {
     if (err != cudaSuccess) {
@@ -53,7 +54,7 @@ float convolve(float * PI, float * K, int n, int h, int w, int oc){
     for (int ic=0; ic<IC; ic++){
         for (int kh=0; kh<KH; kh++){
             for (int kw=0; kw<KW; kw++){
-                input_idx = INDEX_ROW_MAJOR_4(n,PH,w+kw,ic, N,PH,PW,C);
+                input_idx = INDEX_ROW_MAJOR_4(n,h+kh,w+kw,ic, N,PH,PW,C);
                 kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
                 ret += PI[input_idx] * K[kernel_idx];
             }
@@ -79,9 +80,9 @@ __global__ void convolve_cuda(float *PI, float *K, float *O, int N, int H, int W
     // this process could serve as bottleneck, load distribution is critical
     // distribute indices across threads
     int shm_size = KH * KW * IC;
-    int shm_per_t = ceil((float)(shm_size)/(float)(THREADS_PER_BLOCK));
-    int l = shm_per_t * tid;
-    int u = shm_per_t * (tid + 1);
+    int shm_per_thread = ceil((float)(shm_size)/(float)(THREADS_PER_BLOCK));
+    int l = shm_per_thread * tid;
+    int u = shm_per_thread * (tid + 1);
     // parse idx (KH, KW, IC)
     if (l < shm_size) {
         for (int idx=l; idx<((u<shm_size)?u:shm_size); idx++){
