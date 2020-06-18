@@ -15,7 +15,7 @@ def main():
     with open(ref_output_bin, "rb") as h:
         file_content = h.read()
         N, H, W, C = struct.unpack("iiii", file_content[:4 * 4])
-        print("parsed shape {}".format([N,H,W,C]))
+        #print("parsed shape {}".format([N,H,W,C]))
         ref_output = np.asarray(struct.unpack("f" * N * H * W * C, file_content[4 * 4:])).reshape((N, H, W, C))
         if N != 1: raise ValueError
         ref_output = np.ascontiguousarray(ref_output.transpose((0, 2, 1, 3)))
@@ -23,7 +23,7 @@ def main():
     with open(test_output_bin, "rb") as h:
         file_content = h.read()
         N2, H2, W2, C2 = struct.unpack("iiii", file_content[:4 * 4])
-        print("parsed shape {}".format([N2,H2,W2,C2]))
+        #print("parsed shape {}".format([N2,H2,W2,C2]))
         test_output = np.asarray(struct.unpack("f" * N2 * H2 * W2 * C2, file_content[4 * 4:])).reshape((N2, H2, W2, C2))
         test_output = np.ascontiguousarray(test_output.transpose((0, 2, 1, 3)))
 
