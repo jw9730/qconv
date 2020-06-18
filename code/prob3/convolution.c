@@ -24,6 +24,7 @@ FILE * ifptr, * kfptr, * ofptr;
 int N, H, W, C;
 int KH, KW, OC, IC;
 int PH_L, PH_H, PW_L, PW_H;
+int PH, PW;
 
 struct t_arg{
     void * PI_Q;
@@ -117,38 +118,31 @@ void quantize_restore(float * O, void * O_Q, int size, float scale2){
 }
 
 void zero_pad(float * PI, float * I, int N, int H, int W, int C, int KH, int KW){
+    memset(PI, 0, sizeof(float) * N * (H+KW) * (W+KW) * C);
     for (int n=0; n<N; n++){
         for (int ic=0; ic<C; ic++){
-            for (int h=0; h<H+KH; h++){
-                for (int w=0; w<W+KW; w++){
+            for (int h=0; h<H; h++){
+                for (int w=0; w<W; w++){
                     // h, w: position in padded input
                     // position in original input: subtract lower pad
-                    int pi_index = INDEX_ROW_MAJOR_4(n,h,w,ic, N,H,W,C);
-                    int h_in = h - PH_L;
-                    int w_in = w - PW_L;
-                    if (h_in < 0 || h_in >= H || w_in < 0 || w_in >= W) PI[pi_index] = 0;
-                    else {
-                        int in_index = INDEX_ROW_MAJOR_4(n,h_in,w_in,ic, N,H,W,C);
-                        PI[pi_index] = I[in_index];
-                    }
+                    int pi_index = INDEX_ROW_MAJOR_4(n,h+PH_L,w+PW_L,ic, N,PH,PW,C);
+                    int in_index = INDEX_ROW_MAJOR_4(n,h,w,ic, N,H,W,C);
+                    PI[pi_index] = I[in_index];
                 }
             }
         }
     }
 }
-
 float convolve(float * PI, float * K, int n, int h, int w, int oc){
     // gets padded input and kernel array, outputs a convolved output value
     // position in padded input
-    int h_pad = h + PH_L;
-    int w_pad = w + PW_L;
     float ret = 0;
     int input_idx;
     int kernel_idx;
     for (int ic=0; ic<IC; ic++){
         for (int kh=0; kh<KH; kh++){
             for (int kw=0; kw<KW; kw++){
-                input_idx = INDEX_ROW_MAJOR_4(n, h_pad+kh, w_pad+kw, ic, N, H, W, C);
+                input_idx = INDEX_ROW_MAJOR_4(n,h+kh,w+kw,ic, N,PH,PW,C);
                 kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
                 ret += PI[input_idx] * K[kernel_idx];
             }
@@ -156,11 +150,10 @@ float convolve(float * PI, float * K, int n, int h, int w, int oc){
     }
     return ret;
 }
+
 float convolve_avx_fp32(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
     float * PI = (float *) PI_Q;
     float * K = (float *) K_Q;
-    int h_pad = h + PH_L;
-    int w_pad = w + PW_L;
     float ret = 0;
     // parallelize multiplication with avx
     // I: row major, (N, H, W, IC)
@@ -172,7 +165,7 @@ float convolve_avx_fp32(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
         for (int kw=0; kw<KW; kw++){
             int ic = 0;
             int residue = IC;
-            float * PI_p = PI + INDEX_ROW_MAJOR_4(n, h_pad+kh, w_pad+kw, ic, N, H, W, C);
+            float * PI_p = PI + INDEX_ROW_MAJOR_4(n, h+kh, w+kw, ic, N, PH, PW, C);
             float * K_p = K + INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
             for (int chunk=0; chunk<IC/8; chunk++){
                 __m256 vx = _mm256_loadu_ps(PI_p);
@@ -194,8 +187,6 @@ float convolve_avx_fp32(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
 int64_t convolve_avx_int32(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
     int32_t * PI = (int32_t *) PI_Q;
     int32_t * K = (int32_t *) K_Q;
-    int h_pad = h + PH_L;
-    int w_pad = w + PW_L;
     int64_t ret = 0;
     // parallelize multiplication with avx
     // I: row major, (N, H, W, IC)
@@ -207,7 +198,7 @@ int64_t convolve_avx_int32(void * PI_Q, void * K_Q, int n, int h, int w, int oc)
         for (int kw=0; kw<KW; kw++){
             int ic = 0;
             int residue = IC;
-            int32_t * PI_p = PI + INDEX_ROW_MAJOR_4(n, h_pad+kh, w_pad+kw, ic, N, H, W, C);
+            int32_t * PI_p = PI + INDEX_ROW_MAJOR_4(n, h+kh, w+kw, ic, N, PH, PW, C);
             int32_t * K_p = K + INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
             for (int chunk=0; chunk<IC/8; chunk++){
                 __m256i vx = _mm256_loadu_si256((__m256i *)PI_p);
@@ -241,8 +232,6 @@ int64_t convolve_avx_int32(void * PI_Q, void * K_Q, int n, int h, int w, int oc)
 int64_t convolve_avx_int16(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
     int16_t * PI = (int16_t *) PI_Q;
     int16_t * K = (int16_t *) K_Q;
-    int h_pad = h + PH_L;
-    int w_pad = w + PW_L;
     int32_t ret = 0;
     // parallelize multiplication with avx
     // I: row major, (N, H, W, IC)
@@ -254,7 +243,7 @@ int64_t convolve_avx_int16(void * PI_Q, void * K_Q, int n, int h, int w, int oc)
         for (int kw=0; kw<KW; kw++){
             int ic = 0;
             int residue = IC;
-            int16_t * PI_p = PI + INDEX_ROW_MAJOR_4(n, h_pad+kh, w_pad+kw, ic, N, H, W, C);
+            int16_t * PI_p = PI + INDEX_ROW_MAJOR_4(n, h+kh, w+kw, ic, N, PH, PW, C);
             int16_t * K_p = K + INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
             for (int chunk=0; chunk<IC/16; chunk++){
                 __m256i vx = _mm256_loadu_si256((__m256i *)PI_p);
@@ -412,9 +401,11 @@ int main(int argc, char **argv){
     PH_L = KH - PH_H;
     PW_H = (KW + 1)/2;
     PW_L = KW - PW_H;
+    PH = H + KH;
+    PW = W + KW;
     // declared padded input array
     float * PI;
-    if ((rc = posix_memalign((void **)&PI, ALIGN_BYTES, N * (H+KH) * (W+KW) * C * sizeof(float))) != 0){
+    if ((rc = posix_memalign((void **)&PI, ALIGN_BYTES, N * PH * PW * C * sizeof(float))) != 0){
         printf("main: input memory allocation failure\n");
         exit(-1);
     }
@@ -431,7 +422,7 @@ int main(int argc, char **argv){
     start = clock();
     void * PI_Q, * K_Q, * O_Q;
     if (qbits > 0){
-        PI_Q = quantize(PI, q, qsize, iscale, N * (H+KH) * (W+KW) * C);
+        PI_Q = quantize(PI, q, qsize, iscale, N * PH * PW * C);
         K_Q = quantize(K, q, qsize, kscale, KH * KW * OC * IC);
         if ((rc = posix_memalign((void **)&O_Q, ALIGN_BYTES, N * H * W * OC * sizeof(int64_t))) != 0){
             printf("main: output memory allocation failure\n");

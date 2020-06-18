@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <time.h>
+#include <string.h>
 #define INDEX_ROW_MAJOR_4(i, j, k, l, I, J, K, L) ((l) + (L) * ((k) + (K) * ((j) + (J) * (i))))
 #define ALIGN_BYTES (sizeof(void *) * 2)
 
@@ -12,42 +13,34 @@ FILE * ifptr, * kfptr, * ofptr;
 int N, H, W, C;
 int KH, KW, OC, IC;
 int PH_L, PH_H, PW_L, PW_H;
+int PH, PW;
 
 void zero_pad(float * PI, float * I, int N, int H, int W, int C, int KH, int KW){
+    memset(PI, 0, sizeof(float) * N * (H+KW) * (W+KW) * C);
     for (int n=0; n<N; n++){
         for (int ic=0; ic<C; ic++){
-            for (int h=0; h<H+KH; h++){
-                for (int w=0; w<W+KW; w++){
+            for (int h=0; h<H; h++){
+                for (int w=0; w<W; w++){
                     // h, w: position in padded input
                     // position in original input: subtract lower pad
-                    int h_in = h - PH_L;
-                    int w_in = w - PW_L;
-                    int pi_index = INDEX_ROW_MAJOR_4(n,h,w,ic, N,H,W,C);
-                    if (h_in < 0 || h_in >= H || w_in < 0 || w_in >= W){
-                        PI[pi_index] = 0;
-                    }
-                    else {
-                        int in_index = INDEX_ROW_MAJOR_4(n,h_in,w_in,ic, N,H,W,C);
-                        PI[pi_index] = I[in_index];
-                    }
+                    int pi_index = INDEX_ROW_MAJOR_4(n,h+PH_L,w+PW_L,ic, N,PH,PW,C);
+                    int in_index = INDEX_ROW_MAJOR_4(n,h,w,ic, N,H,W,C);
+                    PI[pi_index] = I[in_index];
                 }
             }
         }
     }
 }
-
 float convolve(float * PI, float * K, int n, int h, int w, int oc){
     // gets padded input and kernel array, outputs a convolved output value
     // position in padded input
-    int h_pad = h + PH_L;
-    int w_pad = w + PW_L;
     float ret = 0;
     int input_idx;
     int kernel_idx;
     for (int ic=0; ic<IC; ic++){
         for (int kh=0; kh<KH; kh++){
             for (int kw=0; kw<KW; kw++){
-                input_idx = INDEX_ROW_MAJOR_4(n, h_pad+kh, w_pad+kw, ic, N, H, W, C);
+                input_idx = INDEX_ROW_MAJOR_4(n,h+kh,w+kw,ic, N,PH,PW,C);
                 kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
                 ret += PI[input_idx] * K[kernel_idx];
             }
@@ -142,9 +135,11 @@ int main(int argc, char **argv){
     PH_L = KH - PH_H;
     PW_H = (KW + 1)/2;
     PW_L = KW - PW_H;
+    PH = H + KH;
+    PW = W + KW;
     // declared padded input array
     float * PI;
-    if ((rc = posix_memalign((void **)&PI, ALIGN_BYTES, N * (H+KH) * (W+KW) * C * sizeof(float))) != 0){
+    if ((rc = posix_memalign((void **)&PI, ALIGN_BYTES, N * PH * PW * C * sizeof(float))) != 0){
         printf("main: input memory allocation failure\n");
         exit(-1);
     }
@@ -168,7 +163,6 @@ int main(int argc, char **argv){
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
                     //printf("main: compute O[%d,%d,%d,%d], currently %0.3f\n", n, h, w, oc, O[output_idx]);
                     O[output_idx] = convolve(PI, K, n, h, w, oc);
-                    //printf("main: O[%d,%d,%d,%d] = %0.3f\n", n, h, w, oc, O[output_idx]);
                 }
             }
         }

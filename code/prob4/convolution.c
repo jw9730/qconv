@@ -24,40 +24,35 @@ FILE * ifptr, * kfptr, * ofptr;
 int N, H, W, C;
 int KH, KW, OC, IC;
 int PH_L, PH_H, PW_L, PW_H;
+int PH, PW;
+
 
 void zero_pad(float * PI, float * I, int N, int H, int W, int C, int KH, int KW){
+    memset(PI, 0, sizeof(float) * N * (H+KW) * PW * C);
     for (int n=0; n<N; n++){
         for (int ic=0; ic<C; ic++){
-            for (int h=0; h<H+KH; h++){
-                for (int w=0; w<W+KW; w++){
+            for (int h=0; h<H; h++){
+                for (int w=0; w<W; w++){
                     // h, w: position in padded input
                     // position in original input: subtract lower pad
-                    int pi_index = INDEX_ROW_MAJOR_4(n,h,w,ic, N,H,W,C);
-                    int h_in = h - PH_L;
-                    int w_in = w - PW_L;
-                    if (h_in < 0 || h_in >= H || w_in < 0 || w_in >= W) PI[pi_index] = 0;
-                    else {
-                        int in_index = INDEX_ROW_MAJOR_4(n,h_in,w_in,ic, N,H,W,C);
-                        PI[pi_index] = I[in_index];
-                    }
+                    int pi_index = INDEX_ROW_MAJOR_4(n,h+PH_L,w+PW_L,ic, N,PH,PW,C);
+                    int in_index = INDEX_ROW_MAJOR_4(n,h,w,ic, N,H,W,C);
+                    PI[pi_index] = I[in_index];
                 }
             }
         }
     }
 }
-
 float convolve(float * PI, float * K, int n, int h, int w, int oc){
     // gets padded input and kernel array, outputs a convolved output value
     // position in padded input
-    int h_pad = h + PH_L;
-    int w_pad = w + PW_L;
     float ret = 0;
     int input_idx;
     int kernel_idx;
     for (int ic=0; ic<IC; ic++){
         for (int kh=0; kh<KH; kh++){
             for (int kw=0; kw<KW; kw++){
-                input_idx = INDEX_ROW_MAJOR_4(n, h_pad+kh, w_pad+kw, ic, N, H, W, C);
+                input_idx = INDEX_ROW_MAJOR_4(n,PH,w+kw,ic, N,PH,PW,C);
                 kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
                 ret += PI[input_idx] * K[kernel_idx];
             }
@@ -65,6 +60,7 @@ float convolve(float * PI, float * K, int n, int h, int w, int oc){
     }
     return ret;
 }
+
 global__ void convolve_cuda(float *PI, float *K, float *O, int N, int H, int W, int KH, int KW, int IC, int OC, int PH_L, int PW_L){
     // input stationary
     int BLOCKS_PER_PIXEL = ceil((float)(OC)/(float)(THREADS_PER_BLOCK));
@@ -76,9 +72,6 @@ global__ void convolve_cuda(float *PI, float *K, float *O, int N, int H, int W, 
     int n = pid/(H*W);
     int h = pid%(H*W)/W;
     int w = pid%W;
-    // (padded) input boundary corresponding to window
-    int h_pad = h + PH_L;
-    int w_pad = w + PW_L;
     // declare on-chip shared memory
     extern __shared__ float M[];
     // read input data once per block (shared across threads)
@@ -94,7 +87,7 @@ global__ void convolve_cuda(float *PI, float *K, float *O, int N, int H, int W, 
             int kh = idx/(KW*IC);
             int kw = idx%(KW*IC)/IC;
             int ic = idx%IC;
-            else M[INDEX_ROW_MAJOR_3(kh,kw,ic, KH,KW,IC)] = I[INDEX_ROW_MAJOR_4(n,h_pad+kh,w_pad+kw,ic, N,H,W,IC)];
+            else M[INDEX_ROW_MAJOR_3(kh,kw,ic, KH,KW,IC)] = I[INDEX_ROW_MAJOR_4(n,PH,w+kw,ic, N,PH,PW,IC)];
         }
     }
     // wait until data is ready
@@ -114,6 +107,7 @@ global__ void convolve_cuda(float *PI, float *K, float *O, int N, int H, int W, 
     }
     O[INDEX_ROW_MAJOR_4(n,h,w,ofs+tid, N,H,W,OC)] = acc;
 }
+
 int main(int argc, char **argv){
     ///////////////////////////////////////////parse cmdline///////////////////////////////////////////
     #ifdef DEBUG
@@ -201,9 +195,11 @@ int main(int argc, char **argv){
     PH_L = KH - PH_H;
     PW_H = (KW + 1)/2;
     PW_L = KW - PW_H;
+    PH = H + KH;
+    PW = W + KW;
     // declared padded input array
     float * PI;
-    if ((rc = posix_memalign((void **)&PI, ALIGN_BYTES, N * (H+KH) * (W+KW) * C * sizeof(float))) != 0){
+    if ((rc = posix_memalign((void **)&PI, ALIGN_BYTES, N * PH * PW * C * sizeof(float))) != 0){
         printf("main: input memory allocation failure\n");
         exit(-1);
     }
@@ -216,11 +212,11 @@ int main(int argc, char **argv){
     // loop over outer dimensions, and compute dot product in chunks of size 512
     // kernel function: convolution for a single sliding window
     // allocate the memory on the GPU
-    HANDLE_ERROR( cudaMalloc( (void**)&dev_PI, N * (H+KH) * (W+KW) * C * sizeof(float) ) );
+    HANDLE_ERROR( cudaMalloc( (void**)&dev_PI, N * PH * PW * C * sizeof(float) ) );
     HANDLE_ERROR( cudaMalloc( (void**)&dev_K, H * W * OC * IC * sizeof(float) ) );
     HANDLE_ERROR( cudaMalloc( (void**)&dev_O, N * H * W * OC * sizeof(float) ) );
     // copy the arrays to the GPU
-    HANDLE_ERROR( cudaMemcpy( dev_PI, PI, N * (H+KH) * (W+KW) * C * sizeof(float), cudaMemcpyHostToDevice ) );
+    HANDLE_ERROR( cudaMemcpy( dev_PI, PI, N * PH * PW * C * sizeof(float), cudaMemcpyHostToDevice ) );
     HANDLE_ERROR( cudaMemcpy( dev_K, K, KH * KW * OC * IC * sizeof(float), cudaMemcpyHostToDevice ) );
     // how to organize blocks?
     // maximizing data reuse and parallelism within a block
