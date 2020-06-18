@@ -7,6 +7,7 @@
 #include <cuda_runtime.h>
 #define INDEX_ROW_MAJOR_3(i, j, k, I, J, K) ((k) + (K) * ((j) + (J) * (i)))
 #define INDEX_ROW_MAJOR_4(i, j, k, l, I, J, K, L) ((l) + (L) * ((k) + (K) * ((j) + (J) * (i))))
+#define ALIGN_BYTES (sizeof(void *) * 2)
 #define THREADS_PER_BLOCK 512
 #define HANDLE_ERROR(err) (HandleError( err, __FILE__, __LINE__ ))
 static void HandleError(cudaError_t err, const char *file, int line)
@@ -87,7 +88,7 @@ __global__ void convolve_cuda(float *PI, float *K, float *O, int N, int H, int W
             int kh = idx/(KW*IC);
             int kw = idx%(KW*IC)/IC;
             int ic = idx%IC;
-            else M[INDEX_ROW_MAJOR_3(kh,kw,ic, KH,KW,IC)] = I[INDEX_ROW_MAJOR_4(n,PH,w+kw,ic, N,PH,PW,IC)];
+            else M[INDEX_ROW_MAJOR_3(kh,kw,ic, KH,KW,IC)] = I[INDEX_ROW_MAJOR_4(n,h+kh,w+kw,ic, N,PH,PW,IC)];
         }
     }
     // wait until data is ready
@@ -156,23 +157,22 @@ int main(int argc, char **argv){
     printf("main: read input and kernel file into memory\n");
     #endif
     float * I, * K, * O;
-    size_t align_bytes = sizeof(void *) * 2;
-    assert(align_bytes % sizeof(float) == 0);
+    assert(ALIGN_BYTES % sizeof(float) == 0);
     int rc;
-    if ((rc = posix_memalign((void **)&I, align_bytes, N * H * W * C * sizeof(float))) != 0){
+    if ((rc = posix_memalign((void **)&I, ALIGN_BYTES, N * H * W * C * sizeof(float))) != 0){
         printf("main: input memory allocation failure\n");
         exit(-1);
     }
-    if ((rc = posix_memalign((void **)&K, align_bytes, KH * KW * OC * IC * sizeof(float))) != 0){
+    if ((rc = posix_memalign((void **)&K, ALIGN_BYTES, KH * KW * OC * IC * sizeof(float))) != 0){
         printf("main: kernel memory allocation failure\n");
         exit(-1);
     }
-    if ((rc = posix_memalign((void **)&O, align_bytes, N * H * W * OC * sizeof(float))) != 0){
+    if ((rc = posix_memalign((void **)&O, ALIGN_BYTES, N * H * W * OC * sizeof(float))) != 0){
         printf("main: output memory allocation failure\n");
         exit(-1);
     }
     #ifdef DEBUG
-    printf("main: I %p, K %p, O %p, align_bytes %lu, sizeof(float) %lu\n", I, K, O, align_bytes, sizeof(float));
+    printf("main: I %p, K %p, O %p, align_bytes %lu, sizeof(float) %lu\n", I, K, O, ALIGN_BYTES, sizeof(float));
     #endif
     // read file into memory
     if ((rsize = fread(I, sizeof(float), N * H * W * C, ifptr)) != N * H * W * C){
@@ -212,6 +212,7 @@ int main(int argc, char **argv){
     // loop over outer dimensions, and compute dot product in chunks of size 512
     // kernel function: convolution for a single sliding window
     // allocate the memory on the GPU
+    float *dev_PI, *dev_K, *dev_O;
     HANDLE_ERROR( cudaMalloc( (void**)&dev_PI, N * PH * PW * C * sizeof(float) ) );
     HANDLE_ERROR( cudaMalloc( (void**)&dev_K, H * W * OC * IC * sizeof(float) ) );
     HANDLE_ERROR( cudaMalloc( (void**)&dev_O, N * H * W * OC * sizeof(float) ) );
