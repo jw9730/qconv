@@ -10,8 +10,6 @@ def main():
     ref_output_bin = sys.argv[1]
     test_output_bin = sys.argv[2]
 
-    print("correctness check: {}, {}".format(ref_output_bin, test_output_bin))
-
     with open(ref_output_bin, "rb") as h:
         file_content = h.read()
         N, H, W, C = struct.unpack("iiii", file_content[:4 * 4])
@@ -30,7 +28,7 @@ def main():
 
     # test routine
     assert (N==N2 and H==H2 and W==W2 and C==C2)
-    print("mean absolute error {}".format(abs(ref_output - test_output).mean()))
+    print("correctness check: mean absolute error {}".format(abs(ref_output - test_output).mean()))
 
 if __name__ == "__main__":
     main()
