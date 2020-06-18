@@ -88,7 +88,7 @@ __global__ void convolve_cuda(float *PI, float *K, float *O, int N, int H, int W
             int kh = idx/(KW*IC);
             int kw = idx%(KW*IC)/IC;
             int ic = idx%IC;
-            M[INDEX_ROW_MAJOR_3(kh,kw,ic, KH,KW,IC)] = PI[INDEX_ROW_MAJOR_4(n,h+kh,w+kw,ic, N,PH,PW,IC)];
+            M[INDEX_ROW_MAJOR_3(kh,kw,ic, KH,KW,IC)] = PI[INDEX_ROW_MAJOR_4(n,h+kh,w+kw,ic, N,H+KH,W+KW,IC)];
         }
     }
     // wait until data is ready
