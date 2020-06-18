@@ -354,7 +354,7 @@ int main(int argc, char **argv){
 
     ///////////////////////////////////////////tidying up///////////////////////////////////////////
     // make output file
-    printf("main: flush output to file, header [%d,%d,%d,%d]\n", N, H, W, OC);
+    printf("main: flush output to file, header [%d,%d,%d,%d]: ", N, H, W, OC);
     if ((ofptr = fopen("output_tensor.bin", "wb")) == NULL){
         printf("output file open failed\n");
         exit(-1);
@@ -369,6 +369,17 @@ int main(int argc, char **argv){
         exit(-1);
     }
     fclose(ofptr);
+    // check correctness
+    if ((ofptr = fopen("output_tensor.bin", "rb")) == NULL){
+        printf("output file open failed\n");
+        exit(-1);
+    }
+    if ((rsize = fread(header, sizeof(int), 4, ofptr)) != 4){
+        printf("main: read failure\n");
+        exit(-1);
+    }
+    fclose(ofptr);
+    printf("retrieved [%d,%d,%d,%d]\n", header[0], header[1], header[2], header[3]);
     free(I_Q); free(K_Q);
     free(I); free(K); free(O);
     return 0;
