@@ -198,32 +198,32 @@ int64_t convolve_avx_int32(void * PI_Q, void * K_Q, int n, int h, int w, int oc)
         for (int kw=0; kw<KW; kw++){
             int ic = 0;
             int residue = IC;
-            int32_t * PI_p = PI + INDEX_ROW_MAJOR_4(n, h+kh, w+kw, ic, N, PH, PW, C);
-            int32_t * K_p = K + INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
+            __m256i * PI_p = (__m256i *)(PI + INDEX_ROW_MAJOR_4(n, h+kh, w+kw, ic, N, PH, PW, C));
+            __m256i * K_p = (__m256i *)(K + INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC));
             for (int chunk=0; chunk<IC/8; chunk++){
-                __m256i vx = _mm256_loadu_si256((__m256i *)PI_p);
-                __m256i vy = _mm256_loadu_si256((__m256i *)K_p);
+                __m256i vx = _mm256_loadu_si256(PI_p);
+                __m256i vy = _mm256_loadu_si256(K_p);
+                __m128i * xp = (__m128i *)&vx;
+                __m128i * yp = (__m128i *)&vy;
                 // expand to 64-bits (for precision)
-                __m256i xl = _mm256_cvtepi32_epi64(_mm_loadu_si128((__m128i *)&vx));
-                __m256i xh = _mm256_cvtepi32_epi64(_mm_loadu_si128(((__m128i *)&vx)+1));
-                __m256i yl = _mm256_cvtepi32_epi64(_mm_loadu_si128((__m128i *)&vy));
-                __m256i yh = _mm256_cvtepi32_epi64(_mm_loadu_si128(((__m128i *)&vy)+1));
+                __m256i l = _mm256_mul_epi32(_mm256_cvtepi32_epi64(*xp), _mm256_cvtepi32_epi64(*yp));
+                __m256i h = _mm256_mul_epi32(_mm256_cvtepi32_epi64(*(xp+1)), _mm256_cvtepi32_epi64(*(yp+1)));
                 // compute product
-                acc = _mm256_add_epi64(acc, _mm256_add_epi64(_mm256_mul_epi32(xl, yl), _mm256_mul_epi32(xh, yh)));
-                ic += 8; residue -= 8; PI_p += 8; K_p += 8;
+                acc = _mm256_add_epi64(acc, _mm256_add_epi64(l, h));
+                ic += 8; residue -= 8; PI_p++; K_p++;
             }
             // handle boundary
             __m256i vx = (__m256i) _mm256_setzero_ps();
             __m256i vy = (__m256i) _mm256_setzero_ps();
-            memcpy(&vx, PI_p, sizeof(int32_t) * residue);
-            memcpy(&vy, K_p, sizeof(int32_t) * residue);
+            __m128i * xp = (__m128i *)&vx;
+            __m128i * yp = (__m128i *)&vy;
+            memcpy(xp, PI_p, sizeof(int32_t) * residue);
+            memcpy(yp, K_p, sizeof(int32_t) * residue);
             // expand to 64-bits (for precision)
-            __m256i xl = _mm256_cvtepi32_epi64(_mm_loadu_si128((__m128i *)&vx));
-            __m256i xh = _mm256_cvtepi32_epi64(_mm_loadu_si128(((__m128i *)&vx)+1));
-            __m256i yl = _mm256_cvtepi32_epi64(_mm_loadu_si128((__m128i *)&vy));
-            __m256i yh = _mm256_cvtepi32_epi64(_mm_loadu_si128(((__m128i *)&vy)+1));
+            __m256i l = _mm256_mul_epi32(_mm256_cvtepi32_epi64(*xp), _mm256_cvtepi32_epi64(*yp));
+            __m256i h = _mm256_mul_epi32(_mm256_cvtepi32_epi64(*(xp+1)), _mm256_cvtepi32_epi64(*(yp+1)));
             // compute product
-            acc = _mm256_add_epi64(acc, _mm256_add_epi64(_mm256_mul_epi32(xl, yl), _mm256_mul_epi32(xh, yh)));
+            acc = _mm256_add_epi64(acc, _mm256_add_epi64(l, h));
         }
     }
     for (int k=0; k<4; k++) ret += ((int64_t *)&acc)[k];
@@ -243,32 +243,32 @@ int64_t convolve_avx_int16(void * PI_Q, void * K_Q, int n, int h, int w, int oc)
         for (int kw=0; kw<KW; kw++){
             int ic = 0;
             int residue = IC;
-            int16_t * PI_p = PI + INDEX_ROW_MAJOR_4(n, h+kh, w+kw, ic, N, PH, PW, C);
-            int16_t * K_p = K + INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
+            __m256i * PI_p = (__m256i *)(PI + INDEX_ROW_MAJOR_4(n, h+kh, w+kw, ic, N, PH, PW, C));
+            __m256i * K_p = (__m256i *)(K + INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC));
             for (int chunk=0; chunk<IC/16; chunk++){
                 __m256i vx = _mm256_loadu_si256((__m256i *)PI_p);
                 __m256i vy = _mm256_loadu_si256((__m256i *)K_p);
+                __m128i * xp = (__m128i *)&vx;
+                __m128i * yp = (__m128i *)&vy;
                 // expand to 32-bits (for precision)
-                __m256i xl = _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vx));
-                __m256i xh = _mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vx)+1));
-                __m256i yl = _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vy));
-                __m256i yh = _mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vy)+1));
+                __m256i l = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(*xp), _mm256_cvtepi16_epi32(*yp));
+                __m256i h = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(*(xp+1)), _mm256_cvtepi16_epi32(*(yp+1)));
                 // compute product
-                acc = _mm256_add_epi32(acc, _mm256_add_epi32(_mm256_mullo_epi32(xl, yl), _mm256_mullo_epi32(xh, yh)));
-                ic += 16; residue -= 16; PI_p += 16; K_p += 16;
+                acc = _mm256_add_epi32(acc, _mm256_add_epi32(l, h));
+                ic += 16; residue -= 16; PI_p++; K_p++;
             }
             // handle boundary
             __m256i vx = (__m256i) _mm256_setzero_ps();
             __m256i vy = (__m256i) _mm256_setzero_ps();
-            memcpy(&vx, PI_p, sizeof(int16_t) * residue);
-            memcpy(&vy, K_p, sizeof(int16_t) * residue);
+            __m128i * xp = (__m128i *)&vx;
+            __m128i * yp = (__m128i *)&vy;
+            memcpy(xp, PI_p, sizeof(int16_t) * residue);
+            memcpy(yp, K_p, sizeof(int16_t) * residue);
             // expand to 32-bits (for precision)
-            __m256i xl = _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vx));
-            __m256i xh = _mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vx)+1));
-            __m256i yl = _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vy));
-            __m256i yh = _mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vy)+1));
+            __m256i l = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(*xp), _mm256_cvtepi16_epi32(*yp));
+            __m256i h = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(*(xp+1)), _mm256_cvtepi16_epi32(*(yp+1)));
             // compute product
-            acc = _mm256_add_epi32(acc, _mm256_add_epi32(_mm256_mullo_epi32(xl, yl), _mm256_mullo_epi32(xh, yh)));
+            acc = _mm256_add_epi32(acc, _mm256_add_epi32(l, h));
         }
     }
     for (int k=0; k<8; k++) ret += ((int32_t *)&acc)[k];
