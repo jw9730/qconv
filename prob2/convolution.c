@@ -354,11 +354,14 @@ int main(int argc, char **argv){
 
     ///////////////////////////////////////////tidying up///////////////////////////////////////////
     // make output file
-    #ifdef DEBUG
-    printf("main: flush output to file\n");
-    #endif
+    printf("main: flush output to file, header [%d,%d,%d,%d]\n", N, H, W, OC);
     if ((ofptr = fopen("output_tensor.bin", "wb")) == NULL){
         printf("output file open failed\n");
+        exit(-1);
+    }
+    int32_t header[4] = {N, H, W, OC};
+    if ((rsize = fwrite(header, sizeof(int32_t), 4, ofptr)) != 4){
+        printf("main: write failure\n");
         exit(-1);
     }
     if ((rsize = fwrite(O, sizeof(float), N * H * W * OC, ofptr)) !=  N * H * W * OC){
