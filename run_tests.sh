@@ -20,7 +20,7 @@ do
     ./convolution ../group1/$i/input_tensor.bin ../group1/$i/kernel_tensor.bin
     python3 ../test/test.py ./output_tensor.bin ../test/output_tensor.bin
     cd ..
-    printf "/////////////////////////////prob1 done/////////////////////////////\n\n"
+    printf "/////////////////////////////prob1 done/////////////////////////////\n\n\n"
 
     # prob2
     printf "/////////////////////////////prob3 test/////////////////////////////\n"
@@ -33,7 +33,7 @@ do
     ./convolution ../group1/$i/input_tensor.bin ../group1/$i/kernel_tensor.bin 8
     python3 ../test/test.py ./output_tensor.bin ../test/output_tensor.bin
     cd ..
-    printf "/////////////////////////////prob2 done/////////////////////////////\n\n"
+    printf "/////////////////////////////prob2 done/////////////////////////////\n\n\n"
     
     # prob3
     printf "/////////////////////////////prob3 test/////////////////////////////\n"
@@ -46,7 +46,7 @@ do
     ./convolution ../group1/$i/input_tensor.bin ../group1/$i/kernel_tensor.bin INT16
     python3 ../test/test.py ./output_tensor.bin ../test/output_tensor.bin
     cd ..
-    printf "/////////////////////////////prob3 done/////////////////////////////\n\n"
+    printf "/////////////////////////////prob3 done/////////////////////////////\n\n\n"
 
     # prob4
     printf "/////////////////////////////prob4 test/////////////////////////////\n"
@@ -55,7 +55,7 @@ do
     ./convolution ../group1/$i/input_tensor.bin ../group1/$i/kernel_tensor.bin
     python3 ../test/test.py ./output_tensor.bin ../test/output_tensor.bin
     cd ..
-    printf "/////////////////////////////prob4 done/////////////////////////////\n\n"
+    printf "/////////////////////////////prob4 done/////////////////////////////\n\n\n"
 done
 
 printf "############################ALL DONE############################\n"
