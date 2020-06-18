@@ -36,7 +36,7 @@ struct t_arg{
     float scale2;
 };
 
-void conv_func(void * aux){
+void * conv_func(void * aux){
     struct t_arg * t_arg = (struct t_arg *) aux;
     void * I_Q = t_arg->I_Q;
     void * K_Q = t_arg->K_Q;
