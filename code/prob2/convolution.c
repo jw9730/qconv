@@ -188,6 +188,7 @@ int main(int argc, char **argv){
         qsize = sizeof(int32_t);
         iscale = (1<<19);
         kscale = (1<<19) * 5e2;
+        printf("%f, %f\n", iscale, kscale);
         qconv = &convolve_q32;
     } else if (qbits == 16) {
         q = INT16;
