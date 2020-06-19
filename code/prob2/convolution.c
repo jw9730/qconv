@@ -125,7 +125,7 @@ int64_t convolve_q32(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
 int64_t convolve_q16(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
     int16_t * PI = (int16_t *) PI_Q;
     int16_t * K = (int16_t *) K_Q;
-    int32_t ret = 0;
+    int64_t ret = 0;
     int input_idx;
     int kernel_idx;
     for (int ic=0; ic<IC; ic++){
@@ -133,7 +133,7 @@ int64_t convolve_q16(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
             for (int kw=0; kw<KW; kw++){
                 input_idx = INDEX_ROW_MAJOR_4(n, h+kh, w+kw, ic, N, PH, PW, C);
                 kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                ret += ((int32_t) PI[input_idx]) * ((int32_t) K[kernel_idx]);
+                ret += ((int64_t) PI[input_idx]) * ((int64_t) K[kernel_idx]);
             }
         }
     }
@@ -142,7 +142,7 @@ int64_t convolve_q16(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
 int64_t convolve_q8(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
     int8_t * PI = (int8_t *) PI_Q;
     int8_t * K = (int8_t *) K_Q;
-    int16_t ret = 0;
+    int64_t ret = 0;
     int input_idx;
     int kernel_idx;
     for (int ic=0; ic<IC; ic++){
@@ -150,7 +150,7 @@ int64_t convolve_q8(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
             for (int kw=0; kw<KW; kw++){
                 input_idx = INDEX_ROW_MAJOR_4(n, h+kh, w+kw, ic, N, PH, PW, C);
                 kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                ret += ((int16_t) PI[input_idx]) * ((int16_t) K[kernel_idx]);
+                ret += ((int64_t) PI[input_idx]) * ((int64_t) K[kernel_idx]);
             }
         }
     }
