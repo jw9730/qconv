@@ -118,7 +118,7 @@ int64_t convolve_q32(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
             for (int kw=0; kw<KW; kw++){
                 input_idx = INDEX_ROW_MAJOR_4(n, h+kh, w+kw, ic, N, PH, PW, C);
                 kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                ret += PI[input_idx] * K[kernel_idx]; // implicit typecasting
+                ret += ((int32_t) PI[input_idx]) * ((int32_t) K[kernel_idx]); // implicit typecasting
             }
         }
     }
