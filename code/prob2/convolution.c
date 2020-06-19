@@ -186,8 +186,8 @@ int main(int argc, char **argv){
     if (qbits == 32) {
         q = INT32;
         qsize = sizeof(int32_t);
-        iscale = (1<<9);
-        kscale = (1<<9) * 5e2;
+        iscale = (1<<19);
+        kscale = (1<<19) * 5e2;
         qconv = &convolve_q32;
     } else if (qbits == 16) {
         q = INT16;
