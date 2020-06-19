@@ -111,7 +111,9 @@ int64_t convolve_q32(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
     int32_t * PI = (int32_t *) PI_Q;
     int32_t * K = (int32_t *) K_Q;
     int64_t ret = 0;
-    printf("%lld\n", INT64_MIN);
+    int64_t tmp = 0;
+    tmp += INT64_MAX;
+    printf("%lld, %lld, %lld\n", (int64_t) INT64_MAX, INT64_MAX, tmp);
     int input_idx;
     int kernel_idx;
     for (int ic=0; ic<IC; ic++){
