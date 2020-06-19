@@ -165,6 +165,7 @@ int64_usr_t convolve_q8(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
 
 
 int main(int argc, char **argv){
+    printf("%lu\n", sizeof(int64_usr_t));
     ///////////////////////////////////////////parse cmdline///////////////////////////////////////////
     #ifdef DEBUG
     printf("main: argc=%d\n", argc);
