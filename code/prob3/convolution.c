@@ -232,7 +232,7 @@ int64_t convolve_avx_int32(void * PI_Q, void * K_Q, int n, int h, int w, int oc)
 int64_t convolve_avx_int16(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
     int16_t * PI = (int16_t *) PI_Q;
     int16_t * K = (int16_t *) K_Q;
-    int32_t ret = 0;
+    int64_t ret = 0;
     // parallelize multiplication with avx
     // I: row major, (N, H, W, IC)
     // K: row major, (KH, KW, OC, IC)
@@ -271,8 +271,8 @@ int64_t convolve_avx_int16(void * PI_Q, void * K_Q, int n, int h, int w, int oc)
             acc = _mm256_add_epi32(acc, _mm256_add_epi32(l, h));
         }
     }
-    for (int k=0; k<8; k++) ret += ((int32_t *)&acc)[k];
-    return (int64_t) ret;
+    for (int k=0; k<8; k++) ret += ((int64_t *)&acc)[k];
+    return ret;
 }
 
 
@@ -317,8 +317,8 @@ int main(int argc, char **argv){
         q = INT32;
         qbits = 32;
         qsize = sizeof(int32_t);
-        iscale = (1<<9);
-        kscale = (1<<9) * 5e2;
+        iscale = (1<<19);
+        kscale = (1<<19) * 5e2;
         qconvint = &convolve_avx_int32;
     } else if (strcmp(argv[3], str3) == 0){
         q = INT16;
