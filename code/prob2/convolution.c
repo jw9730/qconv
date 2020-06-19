@@ -340,7 +340,7 @@ int main(int argc, char **argv){
                     // convolution for a single output pixel
                     int output_idx = INDEX_ROW_MAJOR_4(n,h,w,oc, N,H,W,OC);
                     O_Q[output_idx] = qconv(PI_Q, K_Q, n, h, w, oc);
-                    //if (oc==0 && h==H/2) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((float)O_Q[output_idx])/scale2, convolve(PI, K, n, h, w, oc));
+                    if (oc==0 && h==H/2) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((float)O_Q[output_idx])/scale2, convolve(PI, K, n, h, w, oc));
                 }
             }
         }
