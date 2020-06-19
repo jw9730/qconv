@@ -69,8 +69,6 @@ void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
 void quantize_restore(float * O, int64_t * O_Q, int size, float scale2){
     for (int i=0; i<size; i++){
         O[i] = ((float) O_Q[i]) / scale2;
-        printf("%lld -> %f\n", O_Q[i], O[i]);
-        assert(0);
     }
 }
 
@@ -336,7 +334,7 @@ int main(int argc, char **argv){
                     // convolution for a single output pixel
                     int output_idx = INDEX_ROW_MAJOR_4(n,h,w,oc, N,H,W,OC);
                     O_Q[output_idx] = qconv(PI_Q, K_Q, n, h, w, oc);
-                    if (oc==0 && h==H/2) printf(" O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((float)O_Q[output_idx])/scale2, convolve(PI, K, n, h, w, oc));
+                    //if (oc==0 && h==H/2) printf(" O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((float)O_Q[output_idx])/scale2, convolve(PI, K, n, h, w, oc));
                 }
             }
         }
