@@ -13,10 +13,6 @@ typedef enum qenum{
     INT16,
     INT8
 } DATATYPE;
-typedef long long int64_usr_t;
-typedef int int32_usr_t;
-typedef short int16_usr_t;
-typedef char int8_usr_t;
 
 //#define DEBUG
 //#define STAT // show data statistics?
@@ -42,35 +38,35 @@ void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
         for (int i=0; i<num_elem; i++){
             float val = S[i] * scale;
             // clamp overflowing values
-            if (((int64_usr_t) val) > INT32_MAX) ((int32_usr_t *) Q)[i] = INT32_MAX;
-            else if (((int64_usr_t) val) < INT32_MIN) ((int32_usr_t *) Q)[i] = INT32_MIN;
-            else ((int32_usr_t *) Q)[i] = ((int32_usr_t) val);
-            //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int32_usr_t *) Q)[i], (float) (((int32_usr_t *) Q)[i] / scale));
+            if (((int64_t) val) > INT32_MAX) ((int32_t *) Q)[i] = INT32_MAX;
+            else if (((int64_t) val) < INT32_MIN) ((int32_t *) Q)[i] = INT32_MIN;
+            else ((int32_t *) Q)[i] = ((int32_t) val);
+            //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int32_t *) Q)[i], (float) (((int32_t *) Q)[i] / scale));
         }
     }
     else if (q == INT16){
         for (int i=0; i<num_elem; i++){
             float val = S[i] * scale;
             // clamp overflowing values
-            if (((int64_usr_t) val) > INT16_MAX) ((int16_usr_t *) Q)[i] = INT16_MAX;
-            else if (((int64_usr_t) val) < INT16_MIN) ((int16_usr_t *) Q)[i] = INT16_MIN;
-            else ((int16_usr_t *) Q)[i] = ((int16_usr_t) val);
-            //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int16_usr_t *) Q)[i], (float) (((int16_usr_t *) Q)[i] / scale));
+            if (((int64_t) val) > INT16_MAX) ((int16_t *) Q)[i] = INT16_MAX;
+            else if (((int64_t) val) < INT16_MIN) ((int16_t *) Q)[i] = INT16_MIN;
+            else ((int16_t *) Q)[i] = ((int16_t) val);
+            //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int16_t *) Q)[i], (float) (((int16_t *) Q)[i] / scale));
         }
     }
     else if (q == INT8){
         for (int i=0; i<num_elem; i++){
             float val = S[i] * scale;
             // clamp overflowing values
-            if (((int64_usr_t) val) > INT8_MAX) ((int8_usr_t *) Q)[i] = INT8_MAX;
-            else if (((int64_usr_t) val) < INT8_MIN) ((int8_usr_t *) Q)[i] = INT8_MIN;
-            else ((int8_usr_t *) Q)[i] = ((int8_usr_t) val);
-            //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int8_usr_t *) Q)[i], (float) (((int8_usr_t *) Q)[i] / scale));
+            if (((int64_t) val) > INT8_MAX) ((int8_t *) Q)[i] = INT8_MAX;
+            else if (((int64_t) val) < INT8_MIN) ((int8_t *) Q)[i] = INT8_MIN;
+            else ((int8_t *) Q)[i] = ((int8_t) val);
+            //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int8_t *) Q)[i], (float) (((int8_t *) Q)[i] / scale));
         }
     }
     return Q;
 }
-void quantize_restore(float * O, int64_usr_t * O_Q, int size, float scale2){
+void quantize_restore(float * O, int64_t * O_Q, int size, float scale2){
     for (int i=0; i<size; i++){
         O[i] = ((float) O_Q[i]) / scale2;
         printf("%lld -> %f\n", O_Q[i], O[i]);
@@ -111,10 +107,10 @@ float convolve(float * PI, float * K, int n, int h, int w, int oc){
     }
     return ret;
 }
-int64_usr_t convolve_q32(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
-    int32_usr_t * PI = (int32_usr_t *) PI_Q;
-    int32_usr_t * K = (int32_usr_t *) K_Q;
-    int64_usr_t ret = 0;
+int64_t convolve_q32(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
+    int32_t * PI = (int32_t *) PI_Q;
+    int32_t * K = (int32_t *) K_Q;
+    int64_t ret = 0;
     int input_idx;
     int kernel_idx;
     for (int ic=0; ic<IC; ic++){
@@ -126,12 +122,12 @@ int64_usr_t convolve_q32(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
             }
         }
     }
-    return (int64_usr_t) ret;
+    return (int64_t) ret;
 }
-int64_usr_t convolve_q16(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
-    int16_usr_t * PI = (int16_usr_t *) PI_Q;
-    int16_usr_t * K = (int16_usr_t *) K_Q;
-    int32_usr_t ret = 0;
+int64_t convolve_q16(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
+    int16_t * PI = (int16_t *) PI_Q;
+    int16_t * K = (int16_t *) K_Q;
+    int32_t ret = 0;
     int input_idx;
     int kernel_idx;
     for (int ic=0; ic<IC; ic++){
@@ -143,12 +139,12 @@ int64_usr_t convolve_q16(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
             }
         }
     }
-    return (int64_usr_t) ret;
+    return (int64_t) ret;
 }
-int64_usr_t convolve_q8(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
-    int8_usr_t * PI = (int8_usr_t *) PI_Q;
-    int8_usr_t * K = (int8_usr_t *) K_Q;
-    int16_usr_t ret = 0;
+int64_t convolve_q8(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
+    int8_t * PI = (int8_t *) PI_Q;
+    int8_t * K = (int8_t *) K_Q;
+    int16_t ret = 0;
     int input_idx;
     int kernel_idx;
     for (int ic=0; ic<IC; ic++){
@@ -160,12 +156,11 @@ int64_usr_t convolve_q8(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
             }
         }
     }
-    return (int64_usr_t) ret;
+    return (int64_t) ret;
 }
 
 
 int main(int argc, char **argv){
-    printf("%lu\n", sizeof(int64_usr_t));
     ///////////////////////////////////////////parse cmdline///////////////////////////////////////////
     #ifdef DEBUG
     printf("main: argc=%d\n", argc);
@@ -189,22 +184,22 @@ int main(int argc, char **argv){
     enum qenum q;
     int qsize = 0;
     float iscale, kscale;
-    int64_usr_t (* qconv) (void *, void *, int, int, int, int) = NULL;
+    int64_t (* qconv) (void *, void *, int, int, int, int) = NULL;
     if (qbits == 32) {
         q = INT32;
-        qsize = sizeof(int32_usr_t);
+        qsize = sizeof(int32_t);
         iscale = (1<<19);
         kscale = (1<<19) * 5e2;
         qconv = &convolve_q32;
     } else if (qbits == 16) {
         q = INT16;
-        qsize = sizeof(int16_usr_t);
+        qsize = sizeof(int16_t);
         iscale = (1<<7);
         kscale = (1<<7) * 5e2;
         qconv = &convolve_q16;
     } else if (qbits == 8) {
         q = INT8;
-        qsize = sizeof(int8_usr_t);
+        qsize = sizeof(int8_t);
         iscale = (1<<0);
         kscale = (1<<0) * 5e2;
         qconv = &convolve_q8;
@@ -317,8 +312,8 @@ int main(int argc, char **argv){
     start = clock();
     void * PI_Q = quantize(PI, q, qsize, iscale, N * PH * PW * C);
     void * K_Q = quantize(K, q, qsize, kscale, KH * KW * OC * IC);
-    int64_usr_t * O_Q;
-    if ((rc = posix_memalign((void **)&O_Q, ALIGN_BYTES, N * H * W * OC * sizeof(int64_usr_t))) != 0){
+    int64_t * O_Q;
+    if ((rc = posix_memalign((void **)&O_Q, ALIGN_BYTES, N * H * W * OC * sizeof(int64_t))) != 0){
         printf("main: output memory allocation failure\n");
         exit(-1);
     }
@@ -394,8 +389,8 @@ int main(int argc, char **argv){
         printf("output file open failed\n");
         exit(-1);
     }
-    int32_usr_t header[4] = {N, H, W, OC};
-    if ((rsize = fwrite(header, sizeof(int32_usr_t), 4, ofptr)) != 4){
+    int32_t header[4] = {N, H, W, OC};
+    if ((rsize = fwrite(header, sizeof(int32_t), 4, ofptr)) != 4){
         printf("main: write failure\n");
         exit(-1);
     }
