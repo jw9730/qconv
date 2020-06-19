@@ -13,9 +13,9 @@ typedef enum qenum{
     INT16,
     INT8
 } DATATYPE;
-typedef long long int int64_usr_t;
+typedef long long int64_usr_t;
 typedef int int32_usr_t;
-typedef short int int16_usr_t;
+typedef short int16_usr_t;
 typedef char int8_usr_t;
 
 //#define DEBUG
