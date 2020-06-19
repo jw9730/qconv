@@ -73,8 +73,8 @@ void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
 void quantize_restore(float * O, int64_usr_t * O_Q, int size, float scale2){
     for (int i=0; i<size; i++){
         O[i] = ((float) O_Q[i]) / scale2;
-        //printf("%lld -> %f\n", O_Q[i], O[i]);
-        //assert(0);
+        printf("%lld -> %f\n", O_Q[i], O[i]);
+        assert(0);
     }
 }
 
