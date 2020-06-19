@@ -271,8 +271,8 @@ int64_t convolve_avx_int16(void * PI_Q, void * K_Q, int n, int h, int w, int oc)
             acc = _mm256_add_epi32(acc, _mm256_add_epi32(l, h));
         }
     }
-    for (int k=0; k<8; k++) ret += ((int64_t *)&acc)[k];
-    return ret;
+    for (int k=0; k<8; k++) ret += ((int32_t *)&acc)[k];
+    return (int64_t) ret;
 }
 
 
