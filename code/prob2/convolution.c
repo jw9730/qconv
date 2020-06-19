@@ -120,7 +120,7 @@ int64_t convolve_q32(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
             }
         }
     }
-    return (int64_t) ret;
+    return ret;
 }
 int64_t convolve_q16(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
     int16_t * PI = (int16_t *) PI_Q;
@@ -137,7 +137,7 @@ int64_t convolve_q16(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
             }
         }
     }
-    return (int64_t) ret;
+    return ret;
 }
 int64_t convolve_q8(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
     int8_t * PI = (int8_t *) PI_Q;
@@ -154,7 +154,7 @@ int64_t convolve_q8(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
             }
         }
     }
-    return (int64_t) ret;
+    return ret;
 }
 
 
