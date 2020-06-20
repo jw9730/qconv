@@ -61,9 +61,9 @@ def main():
     p3_nrmse_fp32 =  [[0.00000004068699510640, 0.00000004068699510640, 0.00000004068699510640],
                    [0.00000006167062593931, 0.00000006167062593931, 0.00000006167062593931],
                    [0.00000004176184020821, 0.00000004176184020821, 0.00000004176184020821]]
-    p3_nrmse_int32 = [[0.00001974275619431864, 0.00001974275619431864, 0.00001974275619431864],
-                   [0.00002243215931230225, 0.00002243215931230225, 0.00002243215931230225],
-                   [0.00003184317756677046, 0.00003184317756677046, 0.00003184317756677046]]
+    p3_nrmse_int32 = [[0.00000004084621352263, 0.00000004084621352263, 0.00000004084621352263],
+                   [0.00000006036117383701, 0.00000006036117383701, 0.00000006036117383701],
+                   [0.00000004598248182219, 0.00000004598248182219, 0.00000004598248182219]]
     p3_nrmse_int16 =  [[0.00007786053174640983, 0.00007786053174640983, 0.00007786053174640983],
                    [0.00008945982699515298, 0.00008945982699515298, 0.00008945982699515298],
                    [0.00013071547436993569, 0.00013071547436993569, 0.00013071547436993569]]
@@ -197,10 +197,10 @@ def main():
     x = [p1_ctime_avg/p3_ctime_fp32_avg, p1_ctime_avg/p3_ctime_int32_avg, p1_ctime_avg/p3_ctime_int16_avg]
     y = [p3_nrmse_fp32_avg, p3_nrmse_int32_avg, p3_nrmse_int16_avg]
     plt.plot(x, y, '-go', label="AVX")
-    plt.annotate('FP32',  xy=[p1_ctime_avg/p3_ctime_fp32_avg, p3_nrmse_fp32_avg], textcoords='data', clip_on=True)
-    plt.annotate('INT32', xy=[p1_ctime_avg/p3_ctime_int32_avg, p3_nrmse_int32_avg], textcoords='data', clip_on=True)
+    plt.annotate('FP32',  xy=[p1_ctime_avg/p3_ctime_fp32_avg, p3_nrmse_fp32_avg-0.000003], textcoords='data', clip_on=True)
+    plt.annotate('INT32', xy=[p1_ctime_avg/p3_ctime_int32_avg, p3_nrmse_int32_avg+0.000001], textcoords='data', clip_on=True)
     plt.annotate('INT16', xy=[p1_ctime_avg/p3_ctime_int16_avg, p3_nrmse_int16_avg], textcoords='data', clip_on=True)
-    plt.xlim([7.5, 14.5])
+    plt.xlim([8, 15])
     plt.xlabel("Speedup (times)")
     plt.ylabel("NRMSE")
     plt.legend()
@@ -219,7 +219,7 @@ def main():
     sparsity_int8  = [[50923/222784, 2495/36864, 53/200704],
                      [34175/123008, 13037/147456, 13/100352],
                      [12433/32768, 101475/1048576, 66/100352]]
-    plt.figure()
+    plt.figure(figsize=(4,3))
     sparsity_input = [np.asarray(sparsity_int32).mean(axis=0)[0], np.asarray(sparsity_int16).mean(axis=0)[0], np.asarray(sparsity_int8).mean(axis=0)[0]]
     sparsity_kernel = [np.asarray(sparsity_int32).mean(axis=0)[1], np.asarray(sparsity_int16).mean(axis=0)[1], np.asarray(sparsity_int8).mean(axis=0)[1]]
     sparsity_output = [np.asarray(sparsity_int32).mean(axis=0)[2], np.asarray(sparsity_int16).mean(axis=0)[2], np.asarray(sparsity_int8).mean(axis=0)[2]]
