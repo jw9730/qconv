@@ -33,10 +33,14 @@ void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
         printf("main: quantized memory allocation failure\n");
         exit(-1);
     }
+    int zero_cnt = 0;
     // amplify, typecast and copy
     if (q == INT32){
         for (int i=0; i<num_elem; i++){
             float val = S[i] * scale;
+            #ifdef STAT
+            if ((int32_t) val == 0) zero_cnt++;
+            #endif
             // clamp overflowing values
             if (((int64_t) val) > INT32_MAX) ((int32_t *) Q)[i] = INT32_MAX;
             else if (((int64_t) val) < INT32_MIN) ((int32_t *) Q)[i] = INT32_MIN;
@@ -47,6 +51,9 @@ void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
     else if (q == INT16){
         for (int i=0; i<num_elem; i++){
             float val = S[i] * scale;
+            #ifdef STAT
+            if ((int16_t) val == 0) zero_cnt++;
+            #endif
             // clamp overflowing values
             if (((int64_t) val) > INT16_MAX) ((int16_t *) Q)[i] = INT16_MAX;
             else if (((int64_t) val) < INT16_MIN) ((int16_t *) Q)[i] = INT16_MIN;
@@ -57,6 +64,9 @@ void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
     else if (q == INT8){
         for (int i=0; i<num_elem; i++){
             float val = S[i] * scale;
+            #ifdef STAT
+            if ((int8_t) val == 0) zero_cnt++;
+            #endif
             // clamp overflowing values
             if (((int64_t) val) > INT8_MAX) ((int8_t *) Q)[i] = INT8_MAX;
             else if (((int64_t) val) < INT8_MIN) ((int8_t *) Q)[i] = INT8_MIN;
@@ -64,12 +74,24 @@ void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
             //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int8_t *) Q)[i], (float) (((int8_t *) Q)[i] / scale));
         }
     }
+    #ifdef STAT
+    printf("SPARSITY %d/%d\n", zero_cnt, num_elem);
+    #endif
     return Q;
 }
 void quantize_restore(float * O, int64_t * O_Q, int size, float scale2){
+    #ifdef STAT
+    int zero_cnt = 0;
+    #endif
     for (int i=0; i<size; i++){
+        #ifdef STAT
+        if (O_Q[i]==0) zero_cnt++;
+        #endif
         O[i] = ((float) O_Q[i]) / scale2;
     }
+    #ifdef STAT
+    printf("SPARSITY %d/%d\n", zero_cnt, size);
+    #endif
 }
 
 void zero_pad(float * PI, float * I, int N, int H, int W, int C, int KH, int KW){
