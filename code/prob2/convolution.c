@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <time.h>
 #include <math.h>
+#include <string.h>
 #define INDEX_ROW_MAJOR_4(i, j, k, l, I, J, K, L) ((l) + (L) * ((k) + (K) * ((j) + (J) * (i))))
 #define ALIGN_BYTES (sizeof(void *) * 2)
 typedef enum qenum{
@@ -21,6 +22,7 @@ FILE * ifptr, * kfptr, * ofptr;
 int N, H, W, C;
 int KH, KW, OC, IC;
 int PH_L, PH_H, PW_L, PW_H;
+int PH, PW;
 
 void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
     // allocate quantized array
@@ -31,10 +33,14 @@ void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
         printf("main: quantized memory allocation failure\n");
         exit(-1);
     }
+    int zero_cnt = 0;
     // amplify, typecast and copy
     if (q == INT32){
         for (int i=0; i<num_elem; i++){
             float val = S[i] * scale;
+            #ifdef STAT
+            if ((int32_t) val == 0) zero_cnt++;
+            #endif
             // clamp overflowing values
             if (((int64_t) val) > INT32_MAX) ((int32_t *) Q)[i] = INT32_MAX;
             else if (((int64_t) val) < INT32_MIN) ((int32_t *) Q)[i] = INT32_MIN;
@@ -45,6 +51,9 @@ void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
     else if (q == INT16){
         for (int i=0; i<num_elem; i++){
             float val = S[i] * scale;
+            #ifdef STAT
+            if ((int16_t) val == 0) zero_cnt++;
+            #endif
             // clamp overflowing values
             if (((int64_t) val) > INT16_MAX) ((int16_t *) Q)[i] = INT16_MAX;
             else if (((int64_t) val) < INT16_MIN) ((int16_t *) Q)[i] = INT16_MIN;
@@ -55,6 +64,9 @@ void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
     else if (q == INT8){
         for (int i=0; i<num_elem; i++){
             float val = S[i] * scale;
+            #ifdef STAT
+            if ((int8_t) val == 0) zero_cnt++;
+            #endif
             // clamp overflowing values
             if (((int64_t) val) > INT8_MAX) ((int8_t *) Q)[i] = INT8_MAX;
             else if (((int64_t) val) < INT8_MIN) ((int8_t *) Q)[i] = INT8_MIN;
@@ -62,85 +74,109 @@ void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
             //printf("quantize: %d, %f -> %d -> %f\n", q, S[i], ((int8_t *) Q)[i], (float) (((int8_t *) Q)[i] / scale));
         }
     }
+    #ifdef STAT
+    printf("SPARSITY %d/%d\n", zero_cnt, num_elem);
+    #endif
     return Q;
 }
 void quantize_restore(float * O, int64_t * O_Q, int size, float scale2){
+    #ifdef STAT
+    int zero_cnt = 0;
+    #endif
     for (int i=0; i<size; i++){
+        #ifdef STAT
+        if (O_Q[i]==0) zero_cnt++;
+        #endif
         O[i] = ((float) O_Q[i]) / scale2;
     }
+    #ifdef STAT
+    printf("SPARSITY %d/%d\n", zero_cnt, size);
+    #endif
 }
 
-float convolve(float * I, float * K, int n, int h, int w, int oc){
-    // gets input and kernel array of same size, outputs a convolved output value, assume zero padding
-    // (padded) input boundary corresponding to window
-    int IH_L = h - PH_L;
-    int IW_L = w - PW_L;
+void zero_pad(float * PI, float * I, int N, int H, int W, int C, int KH, int KW){
+    memset(PI, 0, sizeof(float) * N * (H+KW) * (W+KW) * C);
+    for (int n=0; n<N; n++){
+        for (int ic=0; ic<C; ic++){
+            for (int h=0; h<H; h++){
+                for (int w=0; w<W; w++){
+                    // h, w: position in padded input
+                    // position in original input: subtract lower pad
+                    int pi_index = INDEX_ROW_MAJOR_4(n,h+PH_L,w+PW_L,ic, N,PH,PW,C);
+                    int in_index = INDEX_ROW_MAJOR_4(n,h,w,ic, N,H,W,C);
+                    PI[pi_index] = I[in_index];
+                }
+            }
+        }
+    }
+}
+float convolve(float * PI, float * K, int n, int h, int w, int oc){
+    // gets padded input and kernel array, outputs a convolved output value
+    // position in padded input
     float ret = 0;
+    int input_idx;
+    int kernel_idx;
     for (int ic=0; ic<IC; ic++){
         for (int kh=0; kh<KH; kh++){
             for (int kw=0; kw<KW; kw++){
-                if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
-                int input_idx = INDEX_ROW_MAJOR_4(n,IH_L+kh,IW_L+kw,ic, N,H,W,C);
-                int kernel_idx = INDEX_ROW_MAJOR_4(kh,kw,oc,ic, KH,KW,OC,IC);
-                ret += I[input_idx] * K[kernel_idx];
+                input_idx = INDEX_ROW_MAJOR_4(n,h+kh,w+kw,ic, N,PH,PW,C);
+                kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
+                ret += PI[input_idx] * K[kernel_idx];
             }
         }
     }
     return ret;
 }
-int64_t convolve_q32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
-    int32_t * I = (int32_t *) I_Q;
+int64_t convolve_q32(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
+    int32_t * PI = (int32_t *) PI_Q;
     int32_t * K = (int32_t *) K_Q;
-    int IH_L = h - PH_L;
-    int IW_L = w - PW_L;
     int64_t ret = 0;
+    int input_idx;
+    int kernel_idx;
     for (int ic=0; ic<IC; ic++){
         for (int kh=0; kh<KH; kh++){
             for (int kw=0; kw<KW; kw++){
-                if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
-                int input_idx = INDEX_ROW_MAJOR_4(n,IH_L+kh,IW_L+kw,ic, N,H,W,C);
-                int kernel_idx = INDEX_ROW_MAJOR_4(kh,kw,oc,ic, KH,KW,OC,IC);
-                ret += I[input_idx] * K[kernel_idx]; // implicit typecasting
+                input_idx = INDEX_ROW_MAJOR_4(n, h+kh, w+kw, ic, N, PH, PW, C);
+                kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
+                ret += ((int64_t) PI[input_idx]) * ((int64_t) K[kernel_idx]);
             }
         }
     }
-    return (int64_t) ret;
+    return ret;
 }
-int64_t convolve_q16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
-    int16_t * I = (int16_t *) I_Q;
+int64_t convolve_q16(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
+    int16_t * PI = (int16_t *) PI_Q;
     int16_t * K = (int16_t *) K_Q;
-    int IH_L = h - PH_L;
-    int IW_L = w - PW_L;
-    int32_t ret = 0;
+    int64_t ret = 0;
+    int input_idx;
+    int kernel_idx;
     for (int ic=0; ic<IC; ic++){
         for (int kh=0; kh<KH; kh++){
             for (int kw=0; kw<KW; kw++){
-                if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
-                int input_idx = INDEX_ROW_MAJOR_4(n,IH_L+kh,IW_L+kw,ic, N,H,W,C);
-                int kernel_idx = INDEX_ROW_MAJOR_4(kh,kw,oc,ic, KH,KW,OC,IC);
-                ret += I[input_idx] * K[kernel_idx]; // implicit typecasting
+                input_idx = INDEX_ROW_MAJOR_4(n, h+kh, w+kw, ic, N, PH, PW, C);
+                kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
+                ret += ((int64_t) PI[input_idx]) * ((int64_t) K[kernel_idx]);
             }
         }
     }
-    return (int64_t) ret;
+    return ret;
 }
-int64_t convolve_q8(void * I_Q, void * K_Q, int n, int h, int w, int oc){
-    int8_t * I = (int8_t *) I_Q;
+int64_t convolve_q8(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
+    int8_t * PI = (int8_t *) PI_Q;
     int8_t * K = (int8_t *) K_Q;
-    int IH_L = h - PH_L;
-    int IW_L = w - PW_L;
-    int16_t ret = 0;
+    int64_t ret = 0;
+    int input_idx;
+    int kernel_idx;
     for (int ic=0; ic<IC; ic++){
         for (int kh=0; kh<KH; kh++){
             for (int kw=0; kw<KW; kw++){
-                if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
-                int input_idx = INDEX_ROW_MAJOR_4(n,IH_L+kh,IW_L+kw,ic, N,H,W,C);
-                int kernel_idx = INDEX_ROW_MAJOR_4(kh,kw,oc,ic, KH,KW,OC,IC);
-                ret += I[input_idx] * K[kernel_idx]; // implicit typecasting
+                input_idx = INDEX_ROW_MAJOR_4(n, h+kh, w+kw, ic, N, PH, PW, C);
+                kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
+                ret += ((int64_t) PI[input_idx]) * ((int64_t) K[kernel_idx]);
             }
         }
     }
-    return (int64_t) ret;
+    return ret;
 }
 
 
@@ -172,8 +208,8 @@ int main(int argc, char **argv){
     if (qbits == 32) {
         q = INT32;
         qsize = sizeof(int32_t);
-        iscale = (1<<9);
-        kscale = (1<<9) * 5e2;
+        iscale = (1<<19);
+        kscale = (1<<19) * 5e2;
         qconv = &convolve_q32;
     } else if (qbits == 16) {
         q = INT16;
@@ -265,12 +301,26 @@ int main(int argc, char **argv){
     printf("STATISTICS:\t\tinput %.8f+-%.8f, kernel %.8f+-%.8f\n", I_mean, I_std, K_mean, K_std);
     printf("SCALED STATISTICS:\tinput %.8f+-%.8f, kernel %.8f+-%.8f\n", I_mean*iscale, I_std*iscale, K_mean*kscale, K_std*kscale);
     #endif
+    ///////////////////////////////////////////read data///////////////////////////////////////////
+
+
+
+    ///////////////////////////////////////////zero pad///////////////////////////////////////////
     // compute padding (TensorFlow pads more on higher index)
     PH_H = (KH + 1)/2;
     PH_L = KH - PH_H;
     PW_H = (KW + 1)/2;
     PW_L = KW - PW_H;
-    ///////////////////////////////////////////read data///////////////////////////////////////////
+    PH = H + KH;
+    PW = W + KW;
+    // declared padded input array
+    float * PI;
+    if ((rc = posix_memalign((void **)&PI, ALIGN_BYTES, N * PH * PW * C * sizeof(float))) != 0){
+        printf("main: input memory allocation failure\n");
+        exit(-1);
+    }
+    zero_pad(PI, I, N, H, W, C, KH, KW);
+    ///////////////////////////////////////////zero pad///////////////////////////////////////////
 
 
 
@@ -280,7 +330,7 @@ int main(int argc, char **argv){
     #endif
     clock_t start, end;
     start = clock();
-    void * I_Q = quantize(I, q, qsize, iscale, N * H * W * C);
+    void * PI_Q = quantize(PI, q, qsize, iscale, N * PH * PW * C);
     void * K_Q = quantize(K, q, qsize, kscale, KH * KW * OC * IC);
     int64_t * O_Q;
     if ((rc = posix_memalign((void **)&O_Q, ALIGN_BYTES, N * H * W * OC * sizeof(int64_t))) != 0){
@@ -305,8 +355,8 @@ int main(int argc, char **argv){
                 for (int oc=0; oc<OC; oc++){
                     // convolution for a single output pixel
                     int output_idx = INDEX_ROW_MAJOR_4(n,h,w,oc, N,H,W,OC);
-                    O_Q[output_idx] = qconv(I_Q, K_Q, n, h, w, oc);
-                    //if (oc==0 && h==H/2) printf("main: O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((float)O_Q[output_idx])/scale2, convolve(I, K, n, h, w, oc));
+                    O_Q[output_idx] = qconv(PI_Q, K_Q, n, h, w, oc);
+                    //if (oc==0 && h==H/2) printf(" O[%d,%d,%d,%d]: %0.10f (restored), %0.10f (reference)\n", n, h, w, oc, ((float)O_Q[output_idx])/scale2, convolve(PI, K, n, h, w, oc));
                 }
             }
         }
@@ -337,7 +387,7 @@ int main(int argc, char **argv){
             for (int w=0; w<W; w++){
                 for (int oc=0; oc<OC; oc++){
                     float x = O[INDEX_ROW_MAJOR_4(n,h,w,oc, N,H,W,OC)];
-                    float y = convolve(I, K, n, h, w, oc);
+                    float y = convolve(PI, K, n, h, w, oc);
                     acc += (x - y)*(x - y) / (N*H*W*OC);
                     if (ymax<y) ymax = y;
                     if (ymin>y) ymin = y;
@@ -380,8 +430,8 @@ int main(int argc, char **argv){
     }
     fclose(ofptr);
     printf("retrieved [%d,%d,%d,%d]\n", header[0], header[1], header[2], header[3]);
-    free(I_Q); free(K_Q);
-    free(I); free(K); free(O);
+    free(PI_Q); free(K_Q);
+    free(I); free(K); free(O); free(PI);
     return 0;
     ///////////////////////////////////////////tidying up///////////////////////////////////////////
 }

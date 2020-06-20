@@ -24,9 +24,10 @@ FILE * ifptr, * kfptr, * ofptr;
 int N, H, W, C;
 int KH, KW, OC, IC;
 int PH_L, PH_H, PW_L, PW_H;
+int PH, PW;
 
 struct t_arg{
-    void * I_Q;
+    void * PI_Q;
     void * K_Q;
     void * O_Q;
     float (* qconvfp) (void *, void *, int, int, int, int);
@@ -38,7 +39,7 @@ struct t_arg{
 
 void * conv_func(void * aux){
     struct t_arg * t_arg = (struct t_arg *) aux;
-    void * I_Q = t_arg->I_Q;
+    void * PI_Q = t_arg->PI_Q;
     void * K_Q = t_arg->K_Q;
     void * O_Q = t_arg->O_Q;
     int offset = t_arg->offset;
@@ -57,9 +58,9 @@ void * conv_func(void * aux){
             int h = idx%c1/c2;
             int w = idx%c2/c3;
             int oc = idx%c3;
-            assert(idx == INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC));
+            //assert(idx == INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC));
             //printf("%d\t-> %d/%d, %d/%d, %d/%d, %d/%d\n", idx, n, N-1, h, H-1, w, W-1, oc, OC-1);
-            O[idx] = qconv(I_Q, K_Q, n, h, w, oc);
+            O[idx] = qconv(PI_Q, K_Q, n, h, w, oc);
         }
     }
     else {
@@ -71,12 +72,12 @@ void * conv_func(void * aux){
             int h = idx%c1/c2;
             int w = idx%c2/c3;
             int oc = idx%c3;
-            assert(idx == INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC));
+            //assert(idx == INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC));
             //printf("%d\t-> %d/%d, %d/%d, %d/%d, %d/%d\n", idx, n, N-1, h, H-1, w, W-1, oc, OC-1);
-            O[idx] = qconv(I_Q, K_Q, n, h, w, oc);
+            O[idx] = qconv(PI_Q, K_Q, n, h, w, oc);
         }
     }
-
+    return NULL;
 }
 
 void * quantize(float * S, enum qenum q, int qsize, float scale, int num_elem){
@@ -116,31 +117,43 @@ void quantize_restore(float * O, void * O_Q, int size, float scale2){
     for (int i=0; i<size; i++) O[i] = ((float) O_int[i]) / scale2;
 }
 
-float convolve(float * I, float * K, int n, int h, int w, int oc){
-    // gets input and kernel array of same size, outputs a convolved output value, assume zero padding
-    // (padded) input boundary corresponding to window
-    int IH_L = h - PH_L;
-    int IW_L = w - PW_L;
+void zero_pad(float * PI, float * I, int N, int H, int W, int C, int KH, int KW){
+    memset(PI, 0, sizeof(float) * N * (H+KW) * (W+KW) * C);
+    for (int n=0; n<N; n++){
+        for (int ic=0; ic<C; ic++){
+            for (int h=0; h<H; h++){
+                for (int w=0; w<W; w++){
+                    // h, w: position in padded input
+                    // position in original input: subtract lower pad
+                    int pi_index = INDEX_ROW_MAJOR_4(n,h+PH_L,w+PW_L,ic, N,PH,PW,C);
+                    int in_index = INDEX_ROW_MAJOR_4(n,h,w,ic, N,H,W,C);
+                    PI[pi_index] = I[in_index];
+                }
+            }
+        }
+    }
+}
+float convolve(float * PI, float * K, int n, int h, int w, int oc){
+    // gets padded input and kernel array, outputs a convolved output value
+    // position in padded input
     float ret = 0;
     int input_idx;
     int kernel_idx;
     for (int ic=0; ic<IC; ic++){
         for (int kh=0; kh<KH; kh++){
             for (int kw=0; kw<KW; kw++){
-                if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
-                input_idx = INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
+                input_idx = INDEX_ROW_MAJOR_4(n,h+kh,w+kw,ic, N,PH,PW,C);
                 kernel_idx = INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
-                ret += I[input_idx] * K[kernel_idx];
+                ret += PI[input_idx] * K[kernel_idx];
             }
         }
     }
     return ret;
 }
-float convolve_avx_fp32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
-    float * I = (float *) I_Q;
+
+float convolve_avx_fp32(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
+    float * PI = (float *) PI_Q;
     float * K = (float *) K_Q;
-    int IH_L = h - PH_L;
-    int IW_L = w - PW_L;
     float ret = 0;
     // parallelize multiplication with avx
     // I: row major, (N, H, W, IC)
@@ -150,21 +163,20 @@ float convolve_avx_fp32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
     __m256 acc = _mm256_setzero_ps();
     for (int kh=0; kh<KH; kh++){
         for (int kw=0; kw<KW; kw++){
-            if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
             int ic = 0;
             int residue = IC;
-            float * I_p = I + INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
+            float * PI_p = PI + INDEX_ROW_MAJOR_4(n, h+kh, w+kw, ic, N, PH, PW, C);
             float * K_p = K + INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
             for (int chunk=0; chunk<IC/8; chunk++){
-                __m256 vx = _mm256_loadu_ps(I_p);
+                __m256 vx = _mm256_loadu_ps(PI_p);
                 __m256 vy = _mm256_loadu_ps(K_p);
                 acc = _mm256_add_ps(acc, _mm256_mul_ps(vx, vy));
-                ic += 8; residue -= 8; I_p += 8; K_p += 8;
+                ic += 8; residue -= 8; PI_p += 8; K_p += 8;
             }
             // handle boundary
             __m256 vx = _mm256_setzero_ps();
             __m256 vy = _mm256_setzero_ps();
-            memcpy(&vx, I_p, sizeof(float) * residue);
+            memcpy(&vx, PI_p, sizeof(float) * residue);
             memcpy(&vy, K_p, sizeof(float) * residue);
             acc = _mm256_add_ps(acc, _mm256_mul_ps(vx, vy));
         }
@@ -172,11 +184,9 @@ float convolve_avx_fp32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
     for (int k=0; k<8; k++) ret += ((float *)&acc)[k];
     return ret;
 }
-int64_t convolve_avx_int32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
-    int32_t * I = (int32_t *) I_Q;
+int64_t convolve_avx_int32(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
+    int32_t * PI = (int32_t *) PI_Q;
     int32_t * K = (int32_t *) K_Q;
-    int IH_L = h - PH_L;
-    int IW_L = w - PW_L;
     int64_t ret = 0;
     // parallelize multiplication with avx
     // I: row major, (N, H, W, IC)
@@ -186,46 +196,43 @@ int64_t convolve_avx_int32(void * I_Q, void * K_Q, int n, int h, int w, int oc){
     __m256i acc = (__m256i) _mm256_setzero_ps();
     for (int kh=0; kh<KH; kh++){
         for (int kw=0; kw<KW; kw++){
-            if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
             int ic = 0;
             int residue = IC;
-            int32_t * I_p = I + INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
-            int32_t * K_p = K + INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
+            __m256i * PI_p = (__m256i *)(PI + INDEX_ROW_MAJOR_4(n, h+kh, w+kw, ic, N, PH, PW, C));
+            __m256i * K_p = (__m256i *)(K + INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC));
             for (int chunk=0; chunk<IC/8; chunk++){
-                __m256i vx = _mm256_loadu_si256((__m256i *)I_p);
-                __m256i vy = _mm256_loadu_si256((__m256i *)K_p);
+                __m256i vx = _mm256_loadu_si256(PI_p);
+                __m256i vy = _mm256_loadu_si256(K_p);
+                __m128i * xp = (__m128i *)&vx;
+                __m128i * yp = (__m128i *)&vy;
                 // expand to 64-bits (for precision)
-                __m256i xl = _mm256_cvtepi32_epi64(_mm_loadu_si128((__m128i *)&vx));
-                __m256i xh = _mm256_cvtepi32_epi64(_mm_loadu_si128(((__m128i *)&vx)+1));
-                __m256i yl = _mm256_cvtepi32_epi64(_mm_loadu_si128((__m128i *)&vy));
-                __m256i yh = _mm256_cvtepi32_epi64(_mm_loadu_si128(((__m128i *)&vy)+1));
+                __m256i l = _mm256_mul_epi32(_mm256_cvtepi32_epi64(*xp), _mm256_cvtepi32_epi64(*yp));
+                __m256i h = _mm256_mul_epi32(_mm256_cvtepi32_epi64(*(xp+1)), _mm256_cvtepi32_epi64(*(yp+1)));
                 // compute product
-                acc = _mm256_add_epi64(acc, _mm256_add_epi64(_mm256_mul_epi32(xl, yl), _mm256_mul_epi32(xh, yh)));
-                ic += 8; residue -= 8; I_p += 8; K_p += 8;
+                acc = _mm256_add_epi64(acc, _mm256_add_epi64(l, h));
+                ic += 8; residue -= 8; PI_p++; K_p++;
             }
             // handle boundary
             __m256i vx = (__m256i) _mm256_setzero_ps();
             __m256i vy = (__m256i) _mm256_setzero_ps();
-            memcpy(&vx, I_p, sizeof(int32_t) * residue);
-            memcpy(&vy, K_p, sizeof(int32_t) * residue);
+            __m128i * xp = (__m128i *)&vx;
+            __m128i * yp = (__m128i *)&vy;
+            memcpy(xp, PI_p, sizeof(int32_t) * residue);
+            memcpy(yp, K_p, sizeof(int32_t) * residue);
             // expand to 64-bits (for precision)
-            __m256i xl = _mm256_cvtepi32_epi64(_mm_loadu_si128((__m128i *)&vx));
-            __m256i xh = _mm256_cvtepi32_epi64(_mm_loadu_si128(((__m128i *)&vx)+1));
-            __m256i yl = _mm256_cvtepi32_epi64(_mm_loadu_si128((__m128i *)&vy));
-            __m256i yh = _mm256_cvtepi32_epi64(_mm_loadu_si128(((__m128i *)&vy)+1));
+            __m256i l = _mm256_mul_epi32(_mm256_cvtepi32_epi64(*xp), _mm256_cvtepi32_epi64(*yp));
+            __m256i h = _mm256_mul_epi32(_mm256_cvtepi32_epi64(*(xp+1)), _mm256_cvtepi32_epi64(*(yp+1)));
             // compute product
-            acc = _mm256_add_epi64(acc, _mm256_add_epi64(_mm256_mul_epi32(xl, yl), _mm256_mul_epi32(xh, yh)));
+            acc = _mm256_add_epi64(acc, _mm256_add_epi64(l, h));
         }
     }
     for (int k=0; k<4; k++) ret += ((int64_t *)&acc)[k];
     return ret;
 }
-int64_t convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
-    int16_t * I = (int16_t *) I_Q;
+int64_t convolve_avx_int16(void * PI_Q, void * K_Q, int n, int h, int w, int oc){
+    int16_t * PI = (int16_t *) PI_Q;
     int16_t * K = (int16_t *) K_Q;
-    int IH_L = h - PH_L;
-    int IW_L = w - PW_L;
-    int32_t ret = 0;
+    int64_t ret = 0;
     // parallelize multiplication with avx
     // I: row major, (N, H, W, IC)
     // K: row major, (KH, KW, OC, IC)
@@ -234,35 +241,34 @@ int64_t convolve_avx_int16(void * I_Q, void * K_Q, int n, int h, int w, int oc){
     __m256i acc = (__m256i)_mm256_setzero_ps();
     for (int kh=0; kh<KH; kh++){
         for (int kw=0; kw<KW; kw++){
-            if (IH_L+kh < 0 || IH_L+kh >= H || IW_L+kw < 0 || IW_L+kw >= W) continue;
             int ic = 0;
             int residue = IC;
-            int16_t * I_p = I + INDEX_ROW_MAJOR_4(n, IH_L+kh, IW_L+kw, ic, N, H, W, C);
-            int16_t * K_p = K + INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC);
+            __m256i * PI_p = (__m256i *)(PI + INDEX_ROW_MAJOR_4(n, h+kh, w+kw, ic, N, PH, PW, C));
+            __m256i * K_p = (__m256i *)(K + INDEX_ROW_MAJOR_4(kh, kw, oc, ic, KH, KW, OC, IC));
             for (int chunk=0; chunk<IC/16; chunk++){
-                __m256i vx = _mm256_loadu_si256((__m256i *)I_p);
+                __m256i vx = _mm256_loadu_si256((__m256i *)PI_p);
                 __m256i vy = _mm256_loadu_si256((__m256i *)K_p);
+                __m128i * xp = (__m128i *)&vx;
+                __m128i * yp = (__m128i *)&vy;
                 // expand to 32-bits (for precision)
-                __m256i xl = _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vx));
-                __m256i xh = _mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vx)+1));
-                __m256i yl = _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vy));
-                __m256i yh = _mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vy)+1));
+                __m256i l = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(*xp), _mm256_cvtepi16_epi32(*yp));
+                __m256i h = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(*(xp+1)), _mm256_cvtepi16_epi32(*(yp+1)));
                 // compute product
-                acc = _mm256_add_epi32(acc, _mm256_add_epi32(_mm256_mullo_epi32(xl, yl), _mm256_mullo_epi32(xh, yh)));
-                ic += 16; residue -= 16; I_p += 16; K_p += 16;
+                acc = _mm256_add_epi32(acc, _mm256_add_epi32(l, h));
+                ic += 16; residue -= 16; PI_p++; K_p++;
             }
             // handle boundary
             __m256i vx = (__m256i) _mm256_setzero_ps();
             __m256i vy = (__m256i) _mm256_setzero_ps();
-            memcpy(&vx, I_p, sizeof(int16_t) * residue);
-            memcpy(&vy, K_p, sizeof(int16_t) * residue);
+            __m128i * xp = (__m128i *)&vx;
+            __m128i * yp = (__m128i *)&vy;
+            memcpy(xp, PI_p, sizeof(int16_t) * residue);
+            memcpy(yp, K_p, sizeof(int16_t) * residue);
             // expand to 32-bits (for precision)
-            __m256i xl = _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vx));
-            __m256i xh = _mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vx)+1));
-            __m256i yl = _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i *)&vy));
-            __m256i yh = _mm256_cvtepi16_epi32(_mm_loadu_si128(((__m128i *)&vy)+1));
+            __m256i l = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(*xp), _mm256_cvtepi16_epi32(*yp));
+            __m256i h = _mm256_mullo_epi32(_mm256_cvtepi16_epi32(*(xp+1)), _mm256_cvtepi16_epi32(*(yp+1)));
             // compute product
-            acc = _mm256_add_epi32(acc, _mm256_add_epi32(_mm256_mullo_epi32(xl, yl), _mm256_mullo_epi32(xh, yh)));
+            acc = _mm256_add_epi32(acc, _mm256_add_epi32(l, h));
         }
     }
     for (int k=0; k<8; k++) ret += ((int32_t *)&acc)[k];
@@ -311,8 +317,8 @@ int main(int argc, char **argv){
         q = INT32;
         qbits = 32;
         qsize = sizeof(int32_t);
-        iscale = (1<<9);
-        kscale = (1<<9) * 5e2;
+        iscale = (1<<19);
+        kscale = (1<<19) * 5e2;
         qconvint = &convolve_avx_int32;
     } else if (strcmp(argv[3], str3) == 0){
         q = INT16;
@@ -385,12 +391,26 @@ int main(int argc, char **argv){
     }
     fclose(ifptr);
     fclose(kfptr);
+    ///////////////////////////////////////////read data///////////////////////////////////////////
+
+
+
+    ///////////////////////////////////////////zero pad///////////////////////////////////////////
     // compute padding (TensorFlow pads more on higher index)
     PH_H = (KH + 1)/2;
     PH_L = KH - PH_H;
     PW_H = (KW + 1)/2;
     PW_L = KW - PW_H;
-    ///////////////////////////////////////////read data///////////////////////////////////////////
+    PH = H + KH;
+    PW = W + KW;
+    // declared padded input array
+    float * PI;
+    if ((rc = posix_memalign((void **)&PI, ALIGN_BYTES, N * PH * PW * C * sizeof(float))) != 0){
+        printf("main: input memory allocation failure\n");
+        exit(-1);
+    }
+    zero_pad(PI, I, N, H, W, C, KH, KW);
+    ///////////////////////////////////////////zero pad///////////////////////////////////////////
 
 
 
@@ -400,16 +420,16 @@ int main(int argc, char **argv){
     #endif
     clock_t start, end;
     start = clock();
-    void * I_Q, * K_Q, * O_Q;
+    void * PI_Q, * K_Q, * O_Q;
     if (qbits > 0){
-        I_Q = quantize(I, q, qsize, iscale, N * H * W * C);
+        PI_Q = quantize(PI, q, qsize, iscale, N * PH * PW * C);
         K_Q = quantize(K, q, qsize, kscale, KH * KW * OC * IC);
         if ((rc = posix_memalign((void **)&O_Q, ALIGN_BYTES, N * H * W * OC * sizeof(int64_t))) != 0){
             printf("main: output memory allocation failure\n");
             exit(-1);
         }
     } else if (qbits == 0){
-        I_Q = I;
+        PI_Q = PI;
         K_Q = K;
         if ((rc = posix_memalign((void **)&O_Q, ALIGN_BYTES, N * H * W * OC * sizeof(float))) != 0){
             printf("main: output memory allocation failure\n");
@@ -446,7 +466,7 @@ int main(int argc, char **argv){
     struct t_arg * t_arg = t_args;
     int t = 0;
     while(residue>0){
-        t_arg->I_Q = I_Q;
+        t_arg->PI_Q = PI_Q;
         t_arg->K_Q = K_Q;
         t_arg->O_Q = O_Q;
         t_arg->qconvfp = qconvfp;
@@ -489,7 +509,7 @@ int main(int argc, char **argv){
                 for (int oc=0; oc<OC; oc++){
                     int output_idx = INDEX_ROW_MAJOR_4(n, h, w, oc, N, H, W, OC);
                     float x = O[output_idx];
-                    float y = convolve(I, K, n, h, w, oc);
+                    float y = convolve(PI, K, n, h, w, oc);
                     acc += (x - y)*(x - y) / (N*H*W*OC);
                     if (ymax<y) ymax = y;
                     if (ymin>y) ymin = y;
@@ -532,9 +552,9 @@ int main(int argc, char **argv){
     }
     fclose(ofptr);
     printf("retrieved [%d,%d,%d,%d]\n", header[0], header[1], header[2], header[3]);
-    free(I); free(K); free(O);
+    free(I); free(K); free(O); free(PI);
     if (qbits > 0){
-        free(I_Q); free(K_Q);
+        free(PI_Q); free(K_Q);
     }
     return 0;
     ///////////////////////////////////////////tidying up///////////////////////////////////////////

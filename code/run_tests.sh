@@ -1,4 +1,4 @@
-# run test for three test cases, for all convolution.c
+# run test for three test cases, for all problems
 for i in 1 2 3
 do
     printf "############################testcase $i############################\n"
